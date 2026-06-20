@@ -2,8 +2,9 @@
 .SYNOPSIS
     Per-session preflight (~30s) for the Agora Data Driven monorepo. Confirms BOTH
     gcloud credential systems are live (reauthing only when needed), pins the project,
-    and proves the shared ingest secret + shared raw dataset are reachable. Ends with a
-    "Common commands" cheat sheet.
+    and checks whether the shared ingest secret + raw dataset exist yet (noting, not
+    failing, when they do not -- expected on a fresh project). Ends with a "Common
+    commands" cheat sheet.
 .DESCRIPTION
     Run this at the start of every work session. It tolerates probe failures and
     reauths instead of aborting.
@@ -89,7 +90,7 @@ Write-Host "[OK] Active account: $acct" -ForegroundColor Green
 Write-Host "[..] Verifying secret '$PROBE_SECRET' is readable" -ForegroundColor Cyan
 $null = gcloud secrets versions access latest --secret=$PROBE_SECRET --project=$PROJECT 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "[WARN] Could not read secret '$PROBE_SECRET'. Check CLI creds / IAM." -ForegroundColor Yellow
+    Write-Host "[..] Secret '$PROBE_SECRET' not readable yet -- expected on a fresh project (it is created when you wire up Windsor ingest). If you DID create it, check CLI creds / IAM." -ForegroundColor Yellow
 } else {
     Write-Host "[OK] Secret '$PROBE_SECRET' readable (CLI credentials)" -ForegroundColor Green
 }
@@ -105,7 +106,7 @@ bq.get_dataset('$PROJECT.$PROBE_DATASET')
 print('ok')
 "@ 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "[WARN] Could not reach BigQuery dataset '$PROBE_DATASET'. Check ADC / IAM." -ForegroundColor Yellow
+    Write-Host "[..] BigQuery dataset '$PROBE_DATASET' not reachable yet -- expected on a fresh project (created by the Windsor ingest standup). If you DID create it, check ADC / IAM." -ForegroundColor Yellow
 } else {
     Write-Host "[OK] BigQuery dataset '$PROBE_DATASET' reachable (ADC)" -ForegroundColor Green
 }
@@ -122,7 +123,7 @@ Write-Host "Run the template client export job locally (force a rebuild):" -Fore
 Write-Host "  `$env:FORCE_REBUILD='1'; .\.venv\Scripts\python.exe clients\client_template\job\main.py" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Deploy a client dash (manual build + deploy as yourself):" -ForegroundColor White
-Write-Host "  .\clients\client_template\dash\deploy_dash.ps1" -ForegroundColor Gray
+Write-Host "  .\clients\client_template\dash\deploy_dash_template.ps1" -ForegroundColor Gray
 Write-Host "  (Org policy forbids public Cloud Run: deploy uses --no-invoker-iam-check," -ForegroundColor Gray
 Write-Host "   never --allow-unauthenticated; the Flask app does its own password/SSO auth.)" -ForegroundColor Gray
 Write-Host ""

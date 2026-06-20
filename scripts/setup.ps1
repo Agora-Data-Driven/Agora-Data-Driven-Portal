@@ -12,11 +12,11 @@
 $ErrorActionPreference = "Stop"
 $PROJECT = "agora-data-driven"
 
-# --- Probe target (parameterized) -------------------------------------------
-# The final verification block proves BOTH credential systems work end-to-end:
-#   - CLI creds  : reading a Secret Manager secret
-#   - ADC creds  : pinging a BigQuery dataset from the Python client libraries
-# Defaults verify the shared ingest API-key secret and the shared raw layer.
+# --- Optional probe targets (parameterized) ---------------------------------
+# After verifying BOTH credential systems with resource-agnostic checks, setup does a
+# SOFT, informational probe for these two resources. On a fresh/blank GCP project they
+# do not exist yet -- that is EXPECTED, so their absence is reported as a note, never a
+# failure. They are created later by the ingest standup (the shared secret + raw dataset).
 # Adjust these to whatever your FIRST ingest unit actually needs.
 $PROBE_SECRET  = "windsor-api-key"   # shared ingest API key (Secret Manager)
 $PROBE_DATASET = "raw_windsor"       # shared raw layer (BigQuery)
@@ -178,24 +178,51 @@ Must "gcloud auth application-default set-quota-project"
 Write-Host "[OK] Project pinned to $PROJECT" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
-# (g) Final verification -- prove BOTH credential systems work end-to-end
+# (g) Final verification -- prove BOTH credential systems work.
 # ---------------------------------------------------------------------------
-Write-Host "[..] Verifying CLI creds by reading secret '$PROBE_SECRET'" -ForegroundColor Cyan
-# Capture to $null so the secret never prints to the console.
-$null = gcloud secrets versions access latest --secret=$PROBE_SECRET --project=$PROJECT
-Must "read secret '$PROBE_SECRET' (CLI credentials)"
-Write-Host "[OK] CLI credentials can read Secret Manager ('$PROBE_SECRET')" -ForegroundColor Green
+# This runs as the FIRST thing on a new machine, possibly against a BLANK GCP project,
+# so it must NOT require any resource to pre-exist. We verify the two credential systems
+# with RESOURCE-AGNOSTIC checks, then SOFT-probe the configured secret/dataset (absent ==
+# fine on a fresh project). A `NOT_FOUND` only proves auth works and the resource is not
+# created yet -- it is never a setup failure.
 
-Write-Host "[..] Verifying ADC by pinging BigQuery dataset '$PROBE_DATASET'" -ForegroundColor Cyan
+# CLI creds: describing the project needs valid CLI creds + project access and works on
+# an empty project.
+Write-Host "[..] Verifying CLI credentials (describe project $PROJECT)" -ForegroundColor Cyan
+$null = gcloud projects describe $PROJECT --format='value(projectId)'
+Must "describe project $PROJECT (CLI credentials)"
+Write-Host "[OK] CLI credentials work" -ForegroundColor Green
+
+# ADC: mint a token via the Python client libraries' credential path. This is
+# API-agnostic, so it works before any API is enabled or any dataset/secret exists.
+Write-Host "[..] Verifying Application Default Credentials (Python libraries)" -ForegroundColor Cyan
 & $venvPy -c @"
-from google.cloud import bigquery
-bq = bigquery.Client(project='$PROJECT')
-bq.get_dataset('$PROJECT.$PROBE_DATASET')
+import google.auth
+from google.auth.transport.requests import Request
+creds, _ = google.auth.default()
+creds.refresh(Request())
+assert creds.valid
 print('ok')
 "@
-Must "ping BigQuery dataset '$PROBE_DATASET' (ADC / Python client libraries)"
-Write-Host "[OK] ADC can reach BigQuery ('$PROBE_DATASET')" -ForegroundColor Green
+Must "mint an ADC token (ADC / Python client libraries)"
+Write-Host "[OK] ADC works (the Python client libraries can authenticate)" -ForegroundColor Green
+
+# Soft, informational probe: do the configured ingest secret + raw dataset exist YET?
+# On a fresh project they will not -- that is expected; they are created later by the
+# ingest standup. Test-Probe swallows the stderr/exit so a NOT_FOUND never aborts setup.
+Write-Host "[..] Checking optional probe targets (informational only)" -ForegroundColor Cyan
+if (Test-Probe { gcloud secrets describe $PROBE_SECRET --project=$PROJECT }) {
+    Write-Host "[OK] secret '$PROBE_SECRET' exists" -ForegroundColor Green
+} else {
+    Write-Host "[..] secret '$PROBE_SECRET' not created yet -- expected on a fresh project (create it when you wire up Windsor ingest)." -ForegroundColor Yellow
+}
+if (Test-Probe { & $venvPy -c "from google.cloud import bigquery; bigquery.Client(project='$PROJECT').get_dataset('$PROJECT.$PROBE_DATASET')" }) {
+    Write-Host "[OK] dataset '$PROBE_DATASET' exists" -ForegroundColor Green
+} else {
+    Write-Host "[..] dataset '$PROBE_DATASET' not created yet -- expected on a fresh project (created by the Windsor ingest standup)." -ForegroundColor Yellow
+}
 
 Write-Host ""
 Write-Host "[OK] Setup complete. Both credential systems verified." -ForegroundColor Green
+Write-Host "     (Any '[..] not created yet' notes above are normal on a blank project.)" -ForegroundColor Green
 Write-Host "     Next: run start_day.ps1 at the start of each work session." -ForegroundColor Green
