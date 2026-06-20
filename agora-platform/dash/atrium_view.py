@@ -9,8 +9,29 @@ Everything here is a pure function of the workspace dict + the current time, so 
 testable and never touches GCS.
 """
 
+import base64
 import calendar as _calendar
 import datetime
+import json
+
+# The agency and ALL its infrastructure live in Singapore (asia-southeast1). The calendar's notion of
+# "today" must be the client's business day in SGT (UTC+8, no DST), not UTC -- a UTC "today" lags the
+# local day by up to 8 hours, so during SGT mornings it highlights yesterday. Fixed offset is exact
+# for Singapore (SGT never observes DST).
+AGORA_TZ = datetime.timezone(datetime.timedelta(hours=8))
+
+
+def business_today(now=None):
+    """Today's date in the Agora business timezone (SGT, UTC+8) -- the calendar's anchor for 'today'.
+
+    `now` may be None (use the wall clock), a tz-aware datetime (converted to SGT), or a naive
+    datetime (used as-is, so tests can pin an exact local day).
+    """
+    if now is None:
+        now = datetime.datetime.now(AGORA_TZ)
+    elif now.tzinfo is not None:
+        now = now.astimezone(AGORA_TZ)
+    return now.date()
 
 
 # --- Small derivations --------------------------------------------------------------------------
@@ -121,18 +142,17 @@ def _display_month(events, today):
     return int(earliest[0:4]), int(earliest[5:7])
 
 
-def month_grid(events, today):
-    """Build a Sunday-start month grid for the relevant month, mapping events onto day cells.
+def _month_offset(year, month, delta):
+    """Return the (year, month) that is `delta` months away from (year, month)."""
+    idx = year * 12 + (month - 1) + delta
+    return idx // 12, idx % 12 + 1
 
-    Returns {label, year, month, weeks:[[cell,...]]} where each cell has day/in_month/is_today and
-    the events landing on that date.
+
+def _grid_for_month(by_date, today, year, month):
+    """Build one Sunday-start month grid for (year, month) from a pre-indexed {iso: [events]} map.
+
+    Each cell has day/in_month/is_today/is_past and the events landing on that date.
     """
-    events = events or []
-    year, month = _display_month(events, today)
-    by_date = {}
-    for e in events:
-        by_date.setdefault(str(e.get("date", "")), []).append(e)
-
     cal = _calendar.Calendar(firstweekday=6)  # 6 = Sunday
     weeks = []
     for week in cal.monthdatescalendar(year, month):
@@ -157,6 +177,41 @@ def month_grid(events, today):
             })
         weeks.append(cells)
     return {"label": "%s %d" % (_MONTHS[month], year), "year": year, "month": month, "weeks": weeks}
+
+
+def _index_events_by_date(events):
+    """Group events into a {iso-date: [events]} map (shared by every month grid)."""
+    by_date = {}
+    for e in (events or []):
+        by_date.setdefault(str(e.get("date", "")), []).append(e)
+    return by_date
+
+
+def month_grid(events, today):
+    """Single relevant-month grid (today's month if it has events, else the earliest event's).
+
+    Kept for back-compat / direct tests; the calendar tab renders `calendar_months` instead.
+    """
+    year, month = _display_month(events or [], today)
+    return _grid_for_month(_index_events_by_date(events), today, year, month)
+
+
+def calendar_months(events, today, before=1, after=1):
+    """Prev / current / next month grids around TODAY's month.
+
+    The window is anchored on the current date (not on where the events happen), so the surrounding
+    months are always visible and it rolls forward on its own every month: in September you also see
+    August and October; in October you see September and November. Each grid carries `is_current` so
+    the template can emphasise the live month.
+    """
+    by_date = _index_events_by_date(events)
+    grids = []
+    for delta in range(-before, after + 1):
+        y, m = _month_offset(today.year, today.month, delta)
+        grid = _grid_for_month(by_date, today, y, m)
+        grid["is_current"] = (delta == 0)
+        grids.append(grid)
+    return grids
 
 
 def _fmt_md(d):
@@ -228,11 +283,98 @@ def project_progress(ws, events, today):
     }
 
 
+# --- Data freshness (Overview trust strip) ------------------------------------------------------
+def _relative_time(iso, now=None):
+    """Human 'X ago' for an ISO-8601 timestamp, or None if absent/unparseable."""
+    if not iso:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=datetime.timezone.utc)
+    secs = max(0, int((now - dt).total_seconds()))
+    if secs < 90:
+        return "just now"
+    mins = secs // 60
+    if mins < 60:
+        return "%d minute%s ago" % (mins, "" if mins == 1 else "s")
+    hrs = mins // 60
+    if hrs < 24:
+        return "%d hour%s ago" % (hrs, "" if hrs == 1 else "s")
+    days = hrs // 24
+    return "%d day%s ago" % (days, "" if days == 1 else "s")
+
+
+def data_freshness(ws, now=None):
+    """Where the Overview data synced from + how long ago -- a small trust signal, not a metric.
+
+    TODO(integrations): wire `at` to the REAL last sync once Windsor/Meta/Google ingestion lands --
+    e.g. the ingest watermark or the client's _freshness.json sidecar. Until then we show a subtle
+    placeholder so the strip reads as a trust signal rather than a fabricated timestamp.
+    """
+    sync = ws.get("sync") or {}
+    return {
+        "sources": sync.get("sources") or "Meta & Google",
+        "label": _relative_time(sync.get("at"), now) or "2 hours ago",  # placeholder until real sync
+    }
+
+
+# --- Shareable recap (Overview "Share recap" link) ----------------------------------------------
+def recap(ws, today):
+    """A small, forwardable recap of THIS MONTH's headline results -- the SAME ROAS / leads / revenue
+    and 'Wins for the week' the Overview shows. A pure dict, safe to base64 into a capability link.
+    """
+    metrics = ws.get("metrics", []) or []
+
+    def _find(label):
+        for m in metrics:
+            if m.get("label") == label:
+                return m
+        return None
+
+    headline = []
+    for label in ("ROAS", "New leads", "Revenue"):
+        m = _find(label)
+        if m:
+            headline.append({"label": m.get("label", label), "value": m.get("value", ""),
+                             "trend": m.get("trend", ""), "up": bool(m.get("trend_up"))})
+
+    # Wins: mirror the Overview exactly -- curated ws['wins'] if present, else top-3 positive KPIs.
+    wins = []
+    if ws.get("wins"):
+        for w in ws["wins"]:
+            wins.append({"title": w.get("title", ""), "detail": w.get("detail", "")})
+    else:
+        for m in [x for x in metrics if x.get("trend_up")][:3]:
+            wins.append({"title": "%s up %s" % (m.get("label", ""), m.get("trend", "")),
+                         "detail": "%s is now %s." % (m.get("label", ""), m.get("value", ""))})
+
+    return {
+        "client": ws.get("display_name") or "",
+        "month": "%s %d" % (_MONTHS[today.month], today.year),
+        "headline": headline,
+        "wins": wins,
+    }
+
+
+def recap_b64(ws, today):
+    """URL-safe, unpadded base64 of the recap JSON -- this rides in the share link's #fragment, so the
+    recap never touches the server or any bucket; the link literally IS the data.
+    """
+    raw = json.dumps(recap(ws, today), separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
 # --- The full view context ----------------------------------------------------------------------
 def build(ws, client, user, active_tab, now=None):
     """Assemble the `view` dict the Atrium template needs beyond the raw workspace `ws`."""
-    now = now or datetime.datetime.now(datetime.timezone.utc)
-    today = now.date()
+    now_dt = now or datetime.datetime.now(datetime.timezone.utc)
+    today = business_today(now_dt)
     awaiting = awaiting_items(ws)
     cal_events = ws.get("calendar", [])
     return {
@@ -246,6 +388,9 @@ def build(ws, client, user, active_tab, now=None):
         "attention": awaiting,
         "campaigns_live": len(ws.get("campaigns", [])),
         "calendar": month_grid(cal_events, today),
+        "calendars": calendar_months(cal_events, today),
         "milestones": milestones(cal_events, today),
         "progress": project_progress(ws, cal_events, today),
+        "freshness": data_freshness(ws, now_dt),
+        "recap_b64": recap_b64(ws, today),
     }

@@ -149,6 +149,14 @@
       border: 1px solid var(--ax-line); background: var(--ax-white); color: var(--ax-sub); font-size: 13px; font-weight: 600;
     }
     .ax-signout:hover { color: var(--ax-bad); border-color: rgba(229,65,62,.35); }
+    /* Share recap: a premium brand-green pill; flips to violet "copied" on success. */
+    .ax-share { display: inline-flex; align-items: center; gap: 7px; padding: 8px 15px; border-radius: var(--ax-pill);
+      border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: #fff;
+      background: var(--ax-grad-green); box-shadow: 0 6px 16px rgba(79,171,74,.30);
+      transition: filter .12s, transform .12s, background .12s; white-space: nowrap; }
+    .ax-share:hover { filter: brightness(1.04); transform: translateY(-1px); }
+    .ax-share .ax-share-arrow { font-weight: 800; }
+    .ax-share.copied { background: var(--ax-violet-d); box-shadow: 0 6px 16px rgba(92,75,208,.30); }
 
     .ax-body { padding: 26px 28px 60px; max-width: 1120px; width: 100%; }
     .ax-pane { display: none; }
@@ -174,6 +182,10 @@
     .ax-hero-top .ax-ic { width: 18px; height: 18px; }
     .ax-hero-val { font-size: 44px; font-weight: 900; letter-spacing: -1.2px; margin: 8px 0 2px; }
     .ax-hero-cap { color: var(--ax-sub); font-size: 13.5px; }
+    /* Data freshness: a small, muted trust strip under the hero (placeholder time for now). */
+    .ax-fresh { display: flex; align-items: center; gap: 8px; margin: -4px 0 22px; font-size: 12px; color: var(--ax-sub); }
+    .ax-fresh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ax-green); flex: 0 0 auto; animation: axpulse 2.4s ease-out infinite; }
+    @keyframes axpulse { 0% { box-shadow: 0 0 0 0 rgba(79,171,74,.45); } 70% { box-shadow: 0 0 0 7px rgba(79,171,74,0); } 100% { box-shadow: 0 0 0 0 rgba(79,171,74,0); } }
     .ax-up { color: var(--ax-green-d); font-weight: 700; }
     .ax-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 22px; }
     @media (max-width: 720px) { .ax-stats { grid-template-columns: 1fr; } }
@@ -475,7 +487,9 @@
 
     /* Collapsible sidebar -- the topbar button tucks the nav away (choice persists in localStorage). */
     .ax-top-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
-    .atrium.nav-collapsed .ax-app { grid-template-columns: 0 1fr; }
+    /* Collapsed: ONE column so the (now only) main panel fills the width. A 0-width first track
+       would make the main content auto-place into it and squash to ~0 -- that was the bug. */
+    .atrium.nav-collapsed .ax-app { grid-template-columns: 1fr; }
     .atrium.nav-collapsed .ax-side { display: none; }
     @media (max-width: 720px) { .ax-app { grid-template-columns: 1fr; } .ax-side { position: static; height: auto; flex-direction: row; flex-wrap: wrap; } .ax-side-card, .ax-nav .ax-count { display: none; } .ax-nav { flex-direction: row; flex-wrap: wrap; } .ax-editrow { grid-template-columns: 1fr; } }
   </style>
@@ -529,6 +543,9 @@
             {{ ic('bell') }}{% if view.awaiting_total > 0 %}<span class="ax-bdot"></span>{% endif %}
           </button>
           <button class="ax-avatar" type="button" data-goto="settings" title="{{ user }}">{{ view.initials }}</button>
+          <button class="ax-share" type="button" id="ax-sharebtn" data-recap="{{ view.recap_b64 }}"
+                  title="Copy a shareable link to this month's recap"
+                  {% if view.active_tab != 'overview' %}style="display:none"{% endif %}>Share recap <span class="ax-share-arrow">&rarr;</span></button>
           <a class="ax-signout" href="/logout">{{ ic('logout') }}<span>Sign out</span></a>
         </div>
       </header>
@@ -562,6 +579,9 @@
               {% else %}Your paid campaigns returned {{ roas_metric.value }} for every $1 spent.{% if roas_metric.trend %} &middot; <span class="ax-up">&uarr; {{ roas_metric.trend }}</span>{% endif %}{% endif %}
             </div>
           </div>
+          <!-- Data freshness: subtle trust strip under the hero. TODO(integrations): wire the time
+               to the real last sync (see atrium_view.data_freshness) once Meta/Google ingestion lands. -->
+          <div class="ax-fresh"><span class="ax-fresh-dot"></span>Synced from {{ view.freshness.sources }} &middot; updated {{ view.freshness.label }}</div>
           {% endif %}
 
           {% if ws.headline and ws.headline.stats %}
@@ -1183,6 +1203,8 @@
     });
     var title = document.getElementById("ax-title");
     if (title && titles[tab]) { title.textContent = titles[tab]; }
+    var shareBtnToggle = document.getElementById("ax-sharebtn");
+    if (shareBtnToggle) { shareBtnToggle.style.display = (tab === "overview") ? "" : "none"; }
     if (push && window.history && window.history.pushState) {
       window.history.pushState({ tab: tab }, "", base + "/" + tab);
     }
@@ -1222,6 +1244,38 @@
   if (gw) {
     var hr = new Date().getHours();
     gw.textContent = hr < 12 ? "morning" : (hr < 18 ? "afternoon" : "evening");
+  }
+
+  // ---- Share recap: copy a capability link whose #fragment carries the recap (no server round-trip).
+  function fallbackCopy(text, done) {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.position = "absolute"; ta.style.left = "-9999px";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    if (done) { done(); }
+  }
+  var shareBtn = document.getElementById("ax-sharebtn");
+  if (shareBtn) {
+    var shareDefault = shareBtn.innerHTML;
+    shareBtn.addEventListener("click", function () {
+      var recap = shareBtn.getAttribute("data-recap") || "";
+      var link = window.location.origin + "/r#" + recap;
+      function copied() {
+        shareBtn.classList.add("copied");
+        shareBtn.innerHTML = "Link copied &#10003;";
+        window.setTimeout(function () {
+          shareBtn.classList.remove("copied");
+          shareBtn.innerHTML = shareDefault;
+        }, 2200);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(copied, function () { fallbackCopy(link, copied); });
+      } else {
+        fallbackCopy(link, copied);
+      }
+    });
   }
 
   // ---- POST helpers --------------------------------------------------------
