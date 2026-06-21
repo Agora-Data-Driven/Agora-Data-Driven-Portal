@@ -149,6 +149,11 @@
       border: 1px solid var(--ax-line); background: var(--ax-white); color: var(--ax-sub); font-size: 13px; font-weight: 600;
     }
     .ax-signout:hover { color: var(--ax-bad); border-color: rgba(229,65,62,.35); }
+    /* Super-admin only: jump back to the workspaces console (all clients). Violet = admin accent. */
+    .ax-backadmin { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: var(--ax-pill);
+      border: 1px solid var(--ax-line); background: var(--ax-white); color: var(--ax-violet-d); font-size: 13px; font-weight: 700; white-space: nowrap; }
+    .ax-backadmin .ax-ic { width: 16px; height: 16px; }
+    .ax-backadmin:hover { border-color: var(--ax-violet); background: var(--ax-violet-bg); }
     /* Share recap: a premium brand-green pill; flips to violet "copied" on success. */
     .ax-share { display: inline-flex; align-items: center; gap: 7px; padding: 8px 15px; border-radius: var(--ax-pill);
       border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: #fff;
@@ -195,6 +200,35 @@
     .ax-stat-ic .ax-ic { width: 17px; height: 17px; }
     .ax-stat-note { font-size: 12.5px; color: var(--ax-sub); margin-top: 2px; }
     .ax-stat-note.up { color: var(--ax-green-d); font-weight: 700; }
+    /* Monthly goal: three-tier horizontal bar (Target / Stretch / Breakthrough) */
+    .ax-goal { padding: 20px 22px; margin-bottom: 22px; }
+    .ax-goal-head { display: flex; align-items: center; gap: 8px; color: var(--ax-sub); font-size: 12.5px; font-weight: 700; margin-bottom: 12px; }
+    .ax-goal-head .ax-ic { width: 18px; height: 18px; color: var(--ax-green-d); }
+    .ax-goal-current { display: flex; align-items: baseline; gap: 8px; margin-bottom: 20px; }
+    .ax-goal-cur { font-size: 34px; font-weight: 900; letter-spacing: -1px; line-height: 1; }
+    .ax-goal-cur-sub { font-size: 14px; color: var(--ax-sub); font-weight: 600; }
+    .ax-bar { margin: 4px 6px 8px; }
+    .ax-bar-track { position: relative; height: 16px; }
+    .ax-bar-zones { position: absolute; inset: 0; border-radius: 999px; overflow: hidden; background: #F1F2F4; box-shadow: inset 0 1px 2px rgba(16,24,40,.06); }
+    .ax-zone { position: absolute; top: 0; height: 100%; }
+    .ax-zone.target { background: #F1F2F4; }
+    .ax-zone.stretch { background: #F0FDF4; }
+    .ax-zone.break { background: #DCFCE7; }
+    .ax-bar-fill { position: absolute; left: 0; top: 0; height: 100%; background: linear-gradient(90deg, var(--ax-green), #6fcf6a); box-shadow: 0 1px 4px rgba(79,171,74,.35); }
+    .ax-bar-tick { position: absolute; top: -3px; width: 2px; height: 22px; background: #AEB4C0; border-radius: 2px; transform: translateX(-1px); }
+    .ax-bar-pace { position: absolute; top: -8px; width: 2px; height: 32px; background: var(--ax-violet-d); border-radius: 2px; transform: translateX(-1px); z-index: 4; }
+    .ax-bar-pace-lab { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 800; color: var(--ax-violet-d); white-space: nowrap; }
+    .ax-bar-labels { position: relative; height: 32px; margin-top: 10px; }
+    .ax-bar-lab { position: absolute; top: 0; transform: translateX(-50%); text-align: center; white-space: nowrap; }
+    .ax-bar-lab.end { transform: translateX(-100%); }
+    .ax-bar-lab b { display: block; font-size: 11px; font-weight: 800; }
+    .ax-bar-lab i { display: block; font-size: 10.5px; color: var(--ax-sub); font-style: normal; }
+    .ax-goal-status { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; padding: 8px 13px; border-radius: 10px; margin-top: 4px; }
+    .ax-goal-status .ax-ic { width: 16px; height: 16px; }
+    .ax-goal-status.behind { color: var(--ax-warn); background: #FEF3E6; }
+    .ax-goal-status.ontrack { color: var(--ax-green-d); background: var(--ax-green-bg); }
+    .ax-goal-status.exceeding { color: #15803D; background: #DCFCE7; }
+    .ax-goal-status.breakthrough { color: #166534; background: #BBF7D0; }
     .ax-wins { margin-bottom: 22px; }
     .ax-row-ic.ax-win-ic { background: var(--ax-green-bg); color: var(--ax-green-d); }
     .ax-kpi { padding: 16px; }
@@ -546,6 +580,7 @@
           <button class="ax-share" type="button" id="ax-sharebtn" data-recap="{{ view.recap_b64 }}"
                   title="Copy a shareable link to this month's recap"
                   {% if view.active_tab != 'overview' %}style="display:none"{% endif %}>Share recap <span class="ax-share-arrow">&rarr;</span></button>
+          {% if is_superadmin %}<a class="ax-backadmin" href="/admin/atrium" title="Back to all client workspaces">{{ ic('overview') }}<span>All clients</span></a>{% endif %}
           <a class="ax-signout" href="/logout">{{ ic('logout') }}<span>Sign out</span></a>
         </div>
       </header>
@@ -563,7 +598,7 @@
         <!-- ============ OVERVIEW ============ -->
         <section class="ax-pane {{ 'is-active' if view.active_tab=='overview' else '' }}" data-pane="overview">
           <h1 class="ax-greet">Good <span id="ax-greetword">morning</span>, {{ view.greeting_name }}.</h1>
-          <p class="ax-lede">Here's where your marketing stands today. Review what's waiting, then dive into the detail.</p>
+          <p class="ax-lede">Everything, visible. What's working, what's live, and what's coming next.</p>
 
           {#- Overview headline = the SAME numbers the team manages on the admin side (ws.today /
               ws.split / ws.metrics). Curated ws.headline / ws.wins still win when present, so a
@@ -612,6 +647,66 @@
               <div class="ax-val">{{ ws.today.bookings }}</div>
               <div class="ax-stat-note up">&uarr; Confirmed reservations</div>
             </div>
+          </div>
+          {% endif %}
+
+          {% if view.goal or is_superadmin %}
+          <div class="ax-card ax-goal">
+            <div class="ax-goal-head">{{ ic('target') }} Monthly goal</div>
+            {% if view.goal %}{% set g = view.goal %}
+            <div class="ax-goal-current">
+              <span class="ax-goal-cur">{{ g.current_fmt }}</span>
+              <span class="ax-goal-cur-sub">{{ g.label }} this month</span>
+            </div>
+            <div class="ax-bar">
+              <div class="ax-bar-track">
+                <div class="ax-bar-zones">
+                  <div class="ax-zone target"  style="left:0;width:{{ g.target_pct }}%"></div>
+                  <div class="ax-zone stretch" style="left:{{ g.target_pct }}%;width:{{ g.zone_stretch }}%"></div>
+                  <div class="ax-zone break"   style="left:{{ g.stretch_pct }}%;width:{{ g.zone_break }}%"></div>
+                  <div class="ax-bar-fill" style="width:{{ g.fill_pct }}%"></div>
+                </div>
+                <div class="ax-bar-tick" style="left:{{ g.target_pct }}%"></div>
+                <div class="ax-bar-tick" style="left:{{ g.stretch_pct }}%"></div>
+                <div class="ax-bar-tick" style="left:100%"></div>
+                <div class="ax-bar-pace" style="left:{{ g.pace_pct }}%"><span class="ax-bar-pace-lab">today</span></div>
+              </div>
+              <div class="ax-bar-labels">
+                <span class="ax-bar-lab"     style="left:{{ g.target_pct }}%"><b>Target</b><i>{{ g.target_fmt }}</i></span>
+                <span class="ax-bar-lab"     style="left:{{ g.stretch_pct }}%"><b>Stretch</b><i>{{ g.stretch_fmt }}</i></span>
+                <span class="ax-bar-lab end" style="left:100%"><b>Breakthrough</b><i>{{ g.breakthrough_fmt }}</i></span>
+              </div>
+            </div>
+            <div class="ax-goal-status {{ g.status.level }}">{{ ic(g.status.icon) }} {{ g.status.text }}</div>
+            {% else %}
+            <div class="ax-empty" style="margin-top:6px">No monthly goal set yet — configure the tiers below and the client will see them here.</div>
+            {% endif %}
+            {% if is_superadmin %}
+            {% set goal = ws.goal or {} %}
+            <div class="ax-admin-tools" data-goalform>
+              <span class="ax-doc-label" style="width:100%">Monthly goal — tiers &amp; settings</span>
+              <div class="ax-editrow" style="grid-template-columns:2fr 1fr">
+                <input class="ax-editbox" data-gf="goal_label" value="{{ goal.label|default('leads', true) }}" placeholder="Label / unit (leads, bookings, revenue…)">
+                <select class="ax-editbox" data-gf="goal_format">
+                  <option value="number" {{ 'selected' if (goal.format|default('number')) != 'currency' else '' }}>Number</option>
+                  <option value="currency" {{ 'selected' if (goal.format|default('number')) == 'currency' else '' }}>Currency ($)</option>
+                </select>
+              </div>
+              <div class="ax-editrow" style="grid-template-columns:1fr 1fr 1fr">
+                <input class="ax-editbox" data-gf="goal_target"       value="{{ goal.target|default('', true) }}"       placeholder="Target (e.g. 150)">
+                <input class="ax-editbox" data-gf="goal_stretch"      value="{{ goal.stretch|default('', true) }}"      placeholder="Stretch (e.g. 180)">
+                <input class="ax-editbox" data-gf="goal_breakthrough" value="{{ goal.breakthrough|default('', true) }}" placeholder="Breakthrough (e.g. 220)">
+              </div>
+              <div class="ax-editrow" style="grid-template-columns:1fr 1fr">
+                <input class="ax-editbox" data-gf="goal_current" value="{{ goal.current|default('', true) }}" placeholder="Current (if not linked)">
+                <select class="ax-editbox" data-gf="goal_source_metric">
+                  <option value="">— Current: use field at left —</option>
+                  {% for m in ws.metrics %}<option value="{{ m.label }}" {{ 'selected' if goal and goal.source_metric == m.label else '' }}>Pull from “{{ m.label }}” ({{ m.value }})</option>{% endfor %}
+                </select>
+              </div>
+              <button class="ax-btn violet small" type="button" data-goalsave>Save goal</button>
+            </div>
+            {% endif %}
           </div>
           {% endif %}
 
@@ -1676,6 +1771,14 @@
           fields[el.getAttribute("data-mf-check")] = el.checked ? "1" : "0";
         });
         adminAction("/admin/metrics", fields, btn);
+      });
+    });
+
+    // --- Monthly goal (three tiers) ---
+    qsa("[data-goalsave]").forEach(function (btn) {
+      var panel = document.querySelector("[data-goalform]");
+      btn.addEventListener("click", function () {
+        adminAction("/admin/goal", fieldsFrom(panel, "data-gf", {}), btn);
       });
     });
 
