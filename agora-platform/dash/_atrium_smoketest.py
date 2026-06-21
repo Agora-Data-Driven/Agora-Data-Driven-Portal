@@ -246,6 +246,23 @@ def run():
                content_type="multipart/form-data")
     _check("non-media upload rejected", r.status_code == 400)
 
+    # Signed-URL "bypass the cap" flow (the GCS signing itself needs cloud; here we test the app side).
+    # 1) upload-url degrades gracefully on the local backend (no signing) -> ok:false, never crashes.
+    r = c.post("/w/%s/admin/creative-upload-url" % CLIENT,
+               data={"content_id": "RVR-099", "content_type": "video/mp4"})
+    _check("creative-upload-url responds gracefully", r.status_code == 200 and r.get_json().get("ok") is False)
+    # 2) confirm records a creative uploaded out-of-band (simulating the direct-to-GCS PUT).
+    workspace.write_creative(CLIENT, "RVR-099", b"\x00\x00\x00\x18ftypmp42" + b"0123456789" * 5000, content_type="video/mp4")
+    r = c.post("/w/%s/admin/creative-confirm" % CLIENT, data={"content_id": "RVR-099", "content_type": "video/mp4"})
+    _check("creative-confirm records the upload", r.status_code == 200 and r.get_json().get("ok") is True)
+    # 3) a Range request streams a 206 partial (video seeking + bounded memory).
+    served = c.get("/w/%s/creative/RVR-099" % CLIENT, headers={"Range": "bytes=0-1023"})
+    body = served.get_data()  # drain the streaming generator so its file handle closes (Windows)
+    _check("range request -> 206 partial",
+           served.status_code == 206 and len(body) == 1024
+           and served.headers.get("Content-Range", "").startswith("bytes 0-1023/"))
+    c.post("/w/%s/admin/remove-creative" % CLIENT, data={"content_id": "RVR-099"})
+
     # Delete the content piece in place.
     r = c.post("/w/%s/admin/delete-content" % CLIENT, data={"content_id": "RVR-099"})
     _check("inline delete-content ok", r.status_code == 200)

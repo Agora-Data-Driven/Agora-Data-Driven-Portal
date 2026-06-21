@@ -84,14 +84,29 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
   `client_note`, threaded `comments[]`, and optional uploaded-creative `image_object`/`image_mime`),
   `calendar[]`, `conversations[]` (`client`/`agora` messages), per-user `notify` prefs.
 - **Uploaded creatives = separate private objects (NOT inline in the JSON):** an admin-uploaded
-  creative is stored as its own object `workspace/creatives/<c>/<content_id>` in the **same registry
-  bucket** (keeps the rewrite-in-full workspace JSON small) and is served ONLY through the authed
-  proxy `GET /w/<c>/creative/<content_id>` (mirrors the `/data.json` posture — never made public).
+  creative (image OR video) is stored as its own object `workspace/creatives/<c>/<content_id>` in the
+  **same registry bucket** (keeps the rewrite-in-full workspace JSON small) and is served ONLY through
+  the authed proxy `GET /w/<c>/creative/<content_id>` (mirrors the `/data.json` posture — never made
+  public). The serve route honors HTTP **Range** (a `Range` request → `206` windowed stream, 8 MiB
+  cap, for video seeking; no range → `200` **chunked** full stream with NO `Content-Length`, since
+  Cloud Run caps fixed-length responses at ~32 MiB but streams chunked ones unbounded). `workspace.py`
+  streams via `blob.open("rb")` (one seekable download), never loading the whole object into memory.
+- **Large creatives bypass the ~32 MiB request cap via a SIGNED URL (opt-in infra):** small files
+  still POST through the app (`/w/<c>/admin/upload-creative`); files >30 MiB upload **directly to GCS**.
+  The browser asks `POST /w/<c>/admin/creative-upload-url` for a V4 signed PUT URL
+  (`workspace.signed_upload_url`, **keyless** — signs via the IAM signBlob API using a cloud-platform-
+  scoped runtime-SA token; storage-scoped tokens fail with `ACCESS_TOKEN_SCOPE_INSUFFICIENT`), `PUT`s
+  the file straight to the bucket, then `POST /w/<c>/admin/creative-confirm` records it. ⚠️ Needs
+  one-time infra (run `agora-platform/dash/enable_atrium_uploads.ps1`, idempotent): the
+  `iamcredentials` API on, the runtime SA granted `roles/iam.serviceAccountTokenCreator` **on itself**,
+  and CORS on the registry bucket. If signing is unavailable the route returns `ok:false` and the UI
+  falls back to the in-app POST path (so a default deploy still serves ≤30 MiB uploads with no infra).
 - **In-workspace admin editing = the team edits the REAL `/w/<c>/` in place.** When `is_superadmin()`
   opens a workspace, the SAME client UI renders extra edit affordances (`{% if is_superadmin %}` +
   `data-admin="1"`), posting JSON to `/w/<c>/admin/*`: `strategy`, `strategy-doc`, `generate-summary`,
   `summary`, `campaign`, `delete-campaign`, `content`, `edit-content`, `delete-content`,
-  `content-comment`, `upload-creative`, `remove-creative`, `metrics`, `calendar`, `reply`. The older
+  `content-comment`, `upload-creative`, `creative-upload-url`, `creative-confirm`, `remove-creative`,
+  `metrics`, `calendar`, `reply`. The older
   dark `/admin/atrium/...` console stays as a fallback. **Clients** can now re-decide a creative's
   status anytime (`/approve` ⇄ `/request-changes`) and post threaded `/w/<c>/comment`s.
 - **Routes (all behind existing session auth):** client `GET /w/<c>/` + `/w/<c>/<tab>` (overview,

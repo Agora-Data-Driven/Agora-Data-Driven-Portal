@@ -1719,17 +1719,57 @@
       btn.addEventListener("click", function () { input.click(); });
       input.addEventListener("change", function () {
         if (!input.files || !input.files.length) { return; }
-        var body = new FormData();
-        body.append("content_id", id);
-        body.append("file", input.files[0]);
-        adminMsg("Uploading creative…", true);
+        var file = input.files[0];
+        var ctype = file.type || "application/octet-stream";
+        var DIRECT_MAX = 30 * 1024 * 1024;
         btn.setAttribute("disabled", "disabled");
-        postData("/admin/upload-creative", body)
-          .then(function () { window.location.reload(); })
-          .catch(function () {
-            adminMsg("Upload failed — use an image (≤8 MB) or a video (≤30 MB).", false);
-            btn.removeAttribute("disabled");
+
+        function done() { window.location.reload(); }
+        function fail(msg) { adminMsg(msg || "Upload failed — try again.", false); btn.removeAttribute("disabled"); }
+
+        // Small files upload through the app. Large files (videos) upload STRAIGHT to GCS via a
+        // signed URL, bypassing Cloud Run's ~32 MB request cap.
+        if (file.size <= DIRECT_MAX) {
+          var body = new FormData();
+          body.append("content_id", id);
+          body.append("file", file);
+          adminMsg("Uploading creative…", true);
+          postData("/admin/upload-creative", body).then(done).catch(function () {
+            fail("Upload failed — use an image (≤8 MB) or a smaller video.");
           });
+          return;
+        }
+
+        adminMsg("Preparing large upload…", true);
+        var meta = new FormData();
+        meta.append("content_id", id);
+        meta.append("content_type", ctype);
+        postData("/admin/creative-upload-url", meta).then(function (d) {
+          if (!d || !d.ok || !d.url) { fail("Large uploads aren't available — try a smaller file."); return; }
+          var xhr = new XMLHttpRequest();
+          xhr.open("PUT", d.url, true);
+          xhr.setRequestHeader("Content-Type", ctype);
+          if (xhr.upload) {
+            xhr.upload.onprogress = function (e) {
+              if (e.lengthComputable) { adminMsg("Uploading… " + Math.round(e.loaded * 100 / e.total) + "%", true); }
+            };
+          }
+          xhr.onload = function () {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              adminMsg("Finishing…", true);
+              var c2 = new FormData();
+              c2.append("content_id", id);
+              c2.append("content_type", ctype);
+              postData("/admin/creative-confirm", c2).then(done).catch(function () {
+                fail("Uploaded, but could not be recorded — refresh and retry.");
+              });
+            } else {
+              fail("Direct upload failed (" + xhr.status + ") — try again.");
+            }
+          };
+          xhr.onerror = function () { fail("Direct upload failed — check your connection and retry."); };
+          xhr.send(file);
+        }).catch(function () { fail("Could not start the large upload — try again."); });
       });
     });
     qsa("[data-removecreative]").forEach(function (btn) {

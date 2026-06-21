@@ -181,6 +181,92 @@ def delete_creative(client, content_id):
     _delete_object(creative_object_name(client, content_id))
 
 
+def signed_upload_url(client, content_id, mime, ttl_minutes=15):
+    """A V4 signed PUT URL so the browser uploads a creative DIRECTLY to GCS, bypassing the app's
+    request-size cap (Cloud Run caps requests at ~32 MiB; GCS has no such limit).
+
+    Returns (url, object_name). On the local-fs backend (no GCS), returns (None, object_name) -- the
+    caller falls back to the in-app upload route. Signing uses the runtime SA via the IAM signBlob
+    API (the SA holds roles/iam.serviceAccountTokenCreator on itself), so NO key file is needed.
+    """
+    name = creative_object_name(client, content_id)
+    if _local_dir():
+        return None, name
+    import google.auth  # lazy; only the GCS signing path needs these
+    import google.auth.transport.requests
+    # The signBlob IAM call needs a CLOUD-PLATFORM-scoped token; the storage client's default token is
+    # storage-scoped only (otherwise: ACCESS_TOKEN_SCOPE_INSUFFICIENT). Mint a cloud-platform token
+    # from the runtime SA via ADC and sign with it -- keyless (the SA holds Token Creator on itself).
+    creds, _proj = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    creds.refresh(google.auth.transport.requests.Request())
+    blob = _gcs_client().bucket(_bucket_name()).blob(name)
+    url = blob.generate_signed_url(
+        version="v4",
+        expiration=datetime.timedelta(minutes=ttl_minutes),
+        method="PUT",
+        content_type=mime,
+        service_account_email=getattr(creds, "service_account_email", None),
+        access_token=creds.token,
+    )
+    return url, name
+
+
+def creative_size(client, content_id):
+    """Byte size of a content piece's uploaded creative, or None if it does not exist."""
+    name = creative_object_name(client, content_id)
+    local = _local_dir()
+    if local:
+        path = os.path.join(local, name)
+        return os.path.getsize(path) if os.path.isfile(path) else None
+    blob = _gcs_client().bucket(_bucket_name()).blob(name)
+    if not blob.exists():
+        return None
+    blob.reload()
+    return blob.size
+
+
+def read_creative_range(client, content_id, start, end):
+    """Return bytes [start, end] INCLUSIVE of a creative -- so the serve route can stream/seek video
+    without loading the whole object into memory."""
+    name = creative_object_name(client, content_id)
+    local = _local_dir()
+    if local:
+        with open(os.path.join(local, name), "rb") as fh:
+            fh.seek(start)
+            return fh.read(end - start + 1)
+    return _gcs_client().bucket(_bucket_name()).blob(name).download_as_bytes(start=start, end=end)
+
+
+def stream_creative(client, content_id, start, end, chunk_size=262144):
+    """Yield bytes [start, end] INCLUSIVE in chunks, so a large creative streams to the client
+    without ever loading the whole object into memory (used by the serve route for video)."""
+    name = creative_object_name(client, content_id)
+    local = _local_dir()
+    if local:
+        # Local-fs is the dev/test backend; read the slice and CLOSE the file before yielding so no
+        # OS handle lingers across the stream (Windows won't delete a file with an open handle). Prod
+        # is GCS (below): chunked network reads, bounded memory, no local file handle.
+        with open(os.path.join(local, name), "rb") as fh:
+            fh.seek(start)
+            data = fh.read(end - start + 1)
+        for i in range(0, len(data), chunk_size):
+            yield data[i:i + chunk_size]
+        return
+    # GCS: one seekable download stream (blob.open internally range-fetches), NOT one HTTP GET per
+    # chunk -- so a large video streams over a single connection with bounded memory.
+    blob = _gcs_client().bucket(_bucket_name()).blob(name)
+    with blob.open("rb") as reader:
+        if start:
+            reader.seek(start)
+        remaining = end - start + 1
+        while remaining > 0:
+            buf = reader.read(min(chunk_size, remaining))
+            if not buf:
+                break
+            remaining -= len(buf)
+            yield buf
+
+
 def _mutate(client, fn):
     """Load -> apply `fn(ws)` -> save (last-write-wins). Returns whatever `fn` returns.
 

@@ -682,10 +682,42 @@ def atrium_creative(client, content_id):
     _camp, item = workspace._find_content(ws, content_id)
     if item is None or not item.get("image_object"):
         return Response("Not found", status=404, mimetype="text/plain")
-    data = workspace.read_creative_bytes(client, content_id)
-    if data is None:
+    mime = item.get("image_mime") or "application/octet-stream"
+    size = workspace.creative_size(client, content_id)
+    if size is None:
         return Response("Not found", status=404, mimetype="text/plain")
-    resp = Response(data, mimetype=item.get("image_mime") or "application/octet-stream")
+
+    range_header = request.headers.get("Range", "")
+    if not range_header:
+        # No range: stream the whole object (200) WITHOUT a Content-Length, so werkzeug uses chunked
+        # transfer-encoding. Cloud Run caps fixed-length (Content-Length) responses at ~32 MiB but
+        # streams chunked ones unbounded -- so a >32 MiB video downloads fine here. (Video playback
+        # uses the 206 range path below; its window stays well under the cap.)
+        resp = Response(workspace.stream_creative(client, content_id, 0, size - 1), mimetype=mime)
+        resp.headers["Accept-Ranges"] = "bytes"
+        resp.headers["Cache-Control"] = "private, max-age=60"
+        return resp
+
+    # Range request (video seeking): return a bounded 206 window so memory stays small.
+    window = 8 * 1024 * 1024
+    start, end = 0, size - 1
+    spec = range_header.split("=", 1)[1].split(",")[0].strip() if "=" in range_header else ""
+    lo, _, hi = spec.partition("-")
+    try:
+        if lo:
+            start = int(lo)
+            end = int(hi) if hi else size - 1
+        elif hi:  # suffix range: last N bytes
+            start = max(0, size - int(hi))
+    except ValueError:
+        start, end = 0, size - 1
+    if start >= size:
+        return Response(status=416, headers={"Content-Range": "bytes */%d" % size, "Accept-Ranges": "bytes"})
+    end = min(end, size - 1, start + window - 1)
+    resp = Response(workspace.stream_creative(client, content_id, start, end), status=206, mimetype=mime)
+    resp.headers["Accept-Ranges"] = "bytes"
+    resp.headers["Content-Range"] = "bytes %d-%d/%d" % (start, end, size)
+    resp.headers["Content-Length"] = str(end - start + 1)
     resp.headers["Cache-Control"] = "private, max-age=60"
     return resp
 
@@ -920,6 +952,53 @@ def atrium_admin_upload_creative(client):
     if item is None:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     object_name = workspace.write_creative(client, content_id, data, content_type=mime)
+    workspace.set_content_image(client, content_id, object_name, mime)
+    return jsonify(ok=True, url=url_for("atrium_creative", client=client, content_id=content_id))
+
+
+@app.route("/w/<client>/admin/creative-upload-url", methods=["POST"])
+def atrium_admin_creative_upload_url(client):
+    """Mint a V4 signed PUT URL so the browser uploads a LARGE creative DIRECTLY to GCS, bypassing
+    Cloud Run's ~32 MiB request cap. The client then calls /creative-confirm to record it."""
+    gate = _atrium_admin_json_gate(client)
+    if gate:
+        return gate
+    content_id = request.form.get("content_id", "").strip()
+    mime = (request.form.get("content_type", "") or "").lower()
+    if mime not in _ATRIUM_MEDIA_EXT:
+        return Response('{"error":"unsupported_type"}', status=400, mimetype="application/json")
+    ws = workspace.load_workspace(client)
+    _camp, item = workspace._find_content(ws, content_id) if ws else (None, None)
+    if item is None:
+        return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    try:
+        url, _obj = workspace.signed_upload_url(client, content_id, mime)
+    except Exception:
+        # Signing unavailable/misconfigured -> tell the client to fall back to the in-app upload.
+        app.logger.exception("creative-upload-url signing failed for %s/%s", client, content_id)
+        return jsonify(ok=False, error="sign_unavailable")
+    if not url:
+        return jsonify(ok=False, error="sign_unavailable")
+    return jsonify(ok=True, url=url, mime=mime)
+
+
+@app.route("/w/<client>/admin/creative-confirm", methods=["POST"])
+def atrium_admin_creative_confirm(client):
+    """Record a creative that was uploaded straight to GCS via a signed URL. Verifies it landed."""
+    gate = _atrium_admin_json_gate(client)
+    if gate:
+        return gate
+    content_id = request.form.get("content_id", "").strip()
+    mime = (request.form.get("content_type", "") or "").lower()
+    if mime not in _ATRIUM_MEDIA_EXT:
+        return Response('{"error":"unsupported_type"}', status=400, mimetype="application/json")
+    ws = workspace.load_workspace(client)
+    _camp, item = workspace._find_content(ws, content_id) if ws else (None, None)
+    if item is None:
+        return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    if workspace.creative_size(client, content_id) is None:
+        return Response('{"error":"not_uploaded"}', status=400, mimetype="application/json")
+    object_name = workspace.creative_object_name(client, content_id)
     workspace.set_content_image(client, content_id, object_name, mime)
     return jsonify(ok=True, url=url_for("atrium_creative", client=client, content_id=content_id))
 
