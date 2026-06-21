@@ -1089,17 +1089,30 @@ def atrium_admin_goal(client):
 
 @app.route("/w/<client>/admin/calendar", methods=["POST"])
 def atrium_admin_calendar(client):
-    """Add or delete a calendar event in place. `op` is 'add' or 'delete'."""
+    """Add, delete, or mark-done a calendar event in place. `op` is 'add', 'delete', or 'status'."""
     gate = _atrium_admin_json_gate(client)
     if gate:
         return gate
-    if request.form.get("op") == "delete":
+    op = request.form.get("op")
+    if op == "delete":
         try:
             index = int(request.form.get("index", "-1"))
         except (TypeError, ValueError):
             index = -1
         workspace.delete_calendar_event(client, index)
         return jsonify(ok=True)
+    if op == "status":
+        # Mark an event done (or clear it). Empty status clears; anything else normalizes to "done".
+        try:
+            index = int(request.form.get("index", "-1"))
+        except (TypeError, ValueError):
+            index = -1
+        raw = request.form.get("status", "").strip()
+        status = "done" if raw else ""
+        event = workspace.set_calendar_status(client, index, status)
+        if event is None:
+            return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+        return jsonify(ok=True, event=event)
     date = request.form.get("date", "").strip()
     if not date:
         return Response('{"error":"date_required"}', status=400, mimetype="application/json")

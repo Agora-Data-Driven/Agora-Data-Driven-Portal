@@ -288,6 +288,13 @@ def run():
                data={"op": "add", "date": "2026-07-04", "label": "July promo", "kind": "milestone"})
     _check("inline calendar add ok", r.status_code == 200)
     cal_n = len(workspace.load_workspace(CLIENT)["calendar"])
+    # Mark the just-added event done, then clear it (the "Mark as done" toggle).
+    r = c.post("/w/%s/admin/calendar" % CLIENT, data={"op": "status", "index": str(cal_n - 1), "status": "done"})
+    _check("inline calendar mark-done ok",
+           r.status_code == 200 and workspace.load_workspace(CLIENT)["calendar"][cal_n - 1].get("status") == "done")
+    r = c.post("/w/%s/admin/calendar" % CLIENT, data={"op": "status", "index": str(cal_n - 1), "status": ""})
+    _check("inline calendar clear-done ok",
+           r.status_code == 200 and "status" not in workspace.load_workspace(CLIENT)["calendar"][cal_n - 1])
     r = c.post("/w/%s/admin/calendar" % CLIENT, data={"op": "delete", "index": str(cal_n - 1)})
     _check("inline calendar delete ok",
            r.status_code == 200 and len(workspace.load_workspace(CLIENT)["calendar"]) == cal_n - 1)

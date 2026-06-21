@@ -1154,8 +1154,11 @@
               <div class="ax-com-label">Existing events</div>
               {% for ev in ws.calendar %}
               <div class="ax-set-row" style="padding:8px 0">
-                <div class="ax-set-d"><span class="ax-evd {{ ev.kind }}" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px"></span>{{ ev.date }} — {{ ev.label }} <span class="ax-tag plain">{{ ev.kind }}</span></div>
-                <button class="ax-btn danger small" type="button" data-caldel="{{ loop.index0 }}">Delete</button>
+                <div class="ax-set-d"><span class="ax-evd {{ ev.kind }}" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px"></span>{{ ev.date }} — {{ ev.label }} <span class="ax-tag plain">{{ ev.kind }}</span>{% if ev.status == 'done' %} <span class="ax-tag organic">✓ Done</span>{% endif %}</div>
+                <div style="display:flex;gap:8px;flex-shrink:0">
+                  <button class="ax-btn ghost small" type="button" data-caldone="{{ loop.index0 }}" data-calstatus="{{ 'done' if ev.status == 'done' else '' }}">{{ 'Mark as not done' if ev.status == 'done' else 'Mark as done' }}</button>
+                  <button class="ax-btn danger small" type="button" data-caldel="{{ loop.index0 }}">Delete</button>
+                </div>
               </div>
               {% endfor %}
             </div>
@@ -1834,6 +1837,12 @@
     qsa("[data-caldel]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         adminAction("/admin/calendar", { op: "delete", index: btn.getAttribute("data-caldel") }, btn);
+      });
+    });
+    qsa("[data-caldone]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var next = btn.getAttribute("data-calstatus") === "done" ? "" : "done";
+        adminAction("/admin/calendar", { op: "status", index: btn.getAttribute("data-caldone"), status: next }, btn);
       });
     });
   }

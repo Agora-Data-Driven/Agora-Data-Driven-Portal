@@ -647,6 +647,22 @@ def delete_calendar_event(client, index):
     return _mutate(client, fn)
 
 
+def set_calendar_status(client, index, status):
+    """Set or clear a calendar event's status (e.g. 'done'/'ready') at `index`. An empty status clears
+    it. The calendar view treats a 'done'/'ready' event as accomplished (green ✓, 'ahead' if future).
+    Returns the updated event, or None if the index is out of range."""
+    def fn(ws):
+        events = ws.get("calendar", [])
+        if 0 <= index < len(events):
+            if status:
+                events[index]["status"] = status
+            else:
+                events[index].pop("status", None)
+            return events[index]
+        return None
+    return _mutate(client, fn)
+
+
 # --- Client Communications: email + meeting summaries (team-written, client-read) ---------------
 def add_email_summary(client, subject, summary, date=None, email_id=None):
     """Add an email summary (newest first) to the Client Communications tab. Returns it."""
