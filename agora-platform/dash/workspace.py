@@ -502,6 +502,14 @@ def set_goal(client, goal):
     return _mutate(client, fn)
 
 
+def set_dashboard_url(client, url):
+    """Set the per-client Looker Studio embed URL (empty string hides the dashboard from the client)."""
+    def fn(ws):
+        ws["dashboard_url"] = (url or "").strip()
+        return ws["dashboard_url"]
+    return _mutate(client, fn)
+
+
 def set_overview_counts(client, today=None, split=None, series=None):
     """Update the headline counts used by Overview/Dashboard. Returns the workspace dict."""
     def fn(ws):

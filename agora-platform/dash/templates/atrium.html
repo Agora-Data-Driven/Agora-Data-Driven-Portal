@@ -181,6 +181,18 @@
 
     /* KPI rows */
     .ax-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 22px; }
+    /* Dashboard: embedded Looker Studio report (gradient border + soft green glow) */
+    .ax-dash-frame {
+      border: 2px solid transparent; border-radius: var(--ax-radius); padding: 5px;
+      background: linear-gradient(var(--ax-white), var(--ax-white)) padding-box,
+                  linear-gradient(135deg, #22C55E, #3B82F6) border-box;
+      box-shadow: 0 10px 34px rgba(34,197,94,.16), 0 2px 10px rgba(34,197,94,.10);
+      overflow: hidden;
+    }
+    .ax-dash-frame iframe { display: block; width: 100%; border: 0; border-radius: 9px; overflow: hidden; background: var(--ax-white); }
+    .ax-dashurl-row { display: flex; gap: 8px; align-items: center; }
+    .ax-dashurl-row .ax-editbox { flex: 1; margin-bottom: 0; }
+    .ax-dash-hint { color: var(--ax-sub); font-size: 13px; margin: 10px 0 0; }
     /* Overview hero (ROAS) + stat row + wins */
     .ax-hero { padding: 20px 22px; margin-bottom: 14px; border: 1px solid #cdeccf; background: linear-gradient(180deg, var(--ax-green-bg), var(--ax-white) 62%); }
     .ax-hero-top { display: flex; align-items: center; gap: 8px; color: var(--ax-green-d); font-size: 13px; font-weight: 800; }
@@ -807,68 +819,27 @@
 
         <!-- ============ DASHBOARD ============ -->
         <section class="ax-pane {{ 'is-active' if view.active_tab=='dashboard' else '' }}" data-pane="dashboard">
-          <h1 class="ax-greet">Your numbers this month</h1>
-          <p class="ax-lede">One goal, two streams. Paid and organic both feed the same results.</p>
+          <h1 class="ax-greet">Dashboard</h1>
+          <p class="ax-lede">Your live campaign data — updated automatically.</p>
 
-          <div class="ax-kpis">
-            {% for m in ws.metrics %}
-            <div class="ax-card ax-kpi">
-              <div class="ax-kpi-top"><span class="ax-kpi-ic">{{ ic(m.icon) }}</span>{{ m.label }}</div>
-              <div class="ax-val">{{ m.value }}</div>
-              <span class="ax-trend {{ 'up' if m.trend_up else 'down' }}">{{ '▲' if m.trend.startswith('+') else '▼' }} {{ m.trend }}</span>
-            </div>
-            {% endfor %}
-          </div>
-
-          <div class="ax-cols2">
-            <div class="ax-panel">
-              <h2 class="ax-h2">New leads — last 14 days</h2>
-              <svg class="ax-spark" viewBox="0 0 {{ view.spark.w }} {{ view.spark.h }}" preserveAspectRatio="none" aria-hidden="true">
-                <defs><linearGradient id="axsparkfill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#4FAB4A" stop-opacity="0.22"/><stop offset="100%" stop-color="#4FAB4A" stop-opacity="0"/>
-                </linearGradient></defs>
-                <path d="{{ view.spark.area }}" fill="url(#axsparkfill)"/>
-                <polyline points="{{ view.spark.line }}" fill="none" stroke="#4FAB4A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="{{ view.spark.lastx }}" cy="{{ view.spark.lasty }}" r="3.6" fill="#347A30"/>
-              </svg>
-            </div>
-            <div class="ax-panel">
-              <h2 class="ax-h2">Where your leads came from</h2>
-              <div class="ax-split-bar">
-                <span class="paid" style="width:{{ view.split.paid_pct }}%">{{ view.split.paid }}</span>
-                <span class="organic" style="width:{{ view.split.organic_pct }}%">{{ view.split.organic }}</span>
-              </div>
-              <div class="ax-split-legend">
-                <span><span class="ax-dot-i" style="background:#9484FB"></span>Paid <b>{{ view.split.paid }}</b></span>
-                <span><span class="ax-dot-i" style="background:#4FAB4A"></span>Organic <b>{{ view.split.organic }}</b></span>
-                <span style="margin-left:auto">Total <b>{{ view.split.total }}</b> leads</span>
-              </div>
-              <p class="ax-lede" style="margin:14px 0 0;font-size:13px">
-                {{ view.split.total }} leads = {{ view.split.paid }} paid + {{ view.split.organic }} organic. One goal, two contributing streams.
-              </p>
-            </div>
-          </div>
+          {% set _default_dash = 'https://datastudio.google.com/embed/reporting/6a0bd089-bf0d-453b-a98e-222c4fb26815/page/p_21bylmxn4d' %}
+          {% set dash_url = (ws.dashboard_url if ws.dashboard_url is defined else _default_dash)|trim %}
 
           {% if is_superadmin %}
-          <div class="ax-addpanel" data-metricsform style="margin-top:18px">
-            <h3>Edit headline numbers &amp; KPIs</h3>
-            <div class="ax-editrow" style="grid-template-columns:1fr 1fr 1fr">
-              <input class="ax-editbox" data-mf="today_leads" value="{{ ws.today.leads }}" placeholder="Leads today">
-              <input class="ax-editbox" data-mf="today_visitors" value="{{ ws.today.visitors }}" placeholder="Visitors today">
-              <input class="ax-editbox" data-mf="today_bookings" value="{{ ws.today.bookings }}" placeholder="Bookings today">
+          <div class="ax-addpanel" data-dashurlform style="margin-bottom:16px">
+            <h3>Looker Studio dashboard</h3>
+            <div class="ax-dashurl-row">
+              <input class="ax-editbox" data-dashurl value="{{ dash_url }}" placeholder="Paste your Looker Studio embed URL…" style="margin-bottom:0">
+              <button class="ax-btn violet small" type="button" data-dashurlsave>Save URL</button>
             </div>
-            <div class="ax-editrow">
-              <input class="ax-editbox" data-mf="split_paid" value="{{ ws.split.paid }}" placeholder="Leads from paid">
-              <input class="ax-editbox" data-mf="split_organic" value="{{ ws.split.organic }}" placeholder="Leads from organic">
-            </div>
-            {% for m in ws.metrics %}
-            <div class="ax-editrow" style="grid-template-columns:2fr 1fr 1fr;align-items:center">
-              <input class="ax-editbox" data-mf="metric_value_{{ loop.index0 }}" value="{{ m.value }}" placeholder="{{ m.label }} value">
-              <input class="ax-editbox" data-mf="metric_trend_{{ loop.index0 }}" value="{{ m.trend }}" placeholder="Trend (e.g. +12%)">
-              <label class="ax-set-d" style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><input type="checkbox" data-mf-check="metric_up_{{ loop.index0 }}" {{ 'checked' if m.trend_up else '' }}> {{ m.label }} ↑ good</label>
-            </div>
-            {% endfor %}
-            <button class="ax-btn violet small" type="button" data-metricssave>Save numbers</button>
+            {% if not dash_url %}<p class="ax-dash-hint">Paste your Looker Studio embed URL to activate the dashboard.</p>{% endif %}
+          </div>
+          {% endif %}
+
+          {% if dash_url %}
+          <div class="ax-dash-frame">
+            <iframe src="{{ dash_url }}" width="100%" height="900" frameborder="0" style="border:0" allowfullscreen
+                    sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
           </div>
           {% endif %}
         </section>
@@ -1896,15 +1867,11 @@
       });
     });
 
-    // --- Metrics ---
-    qsa("[data-metricssave]").forEach(function (btn) {
-      var panel = document.querySelector("[data-metricsform]");
+    // --- Looker Studio dashboard URL ---
+    qsa("[data-dashurlsave]").forEach(function (btn) {
+      var input = document.querySelector("[data-dashurl]");
       btn.addEventListener("click", function () {
-        var fields = fieldsFrom(panel, "data-mf", {});
-        qsa("[data-mf-check]", panel).forEach(function (el) {
-          fields[el.getAttribute("data-mf-check")] = el.checked ? "1" : "0";
-        });
-        adminAction("/admin/metrics", fields, btn);
+        adminAction("/admin/dashboard-url", { url: input ? input.value : "" }, btn);
       });
     });
 

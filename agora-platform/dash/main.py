@@ -1164,6 +1164,21 @@ def atrium_admin_goal(client):
     return jsonify(ok=True)
 
 
+@app.route("/w/<client>/admin/dashboard-url", methods=["POST"])
+def atrium_admin_dashboard_url(client):
+    """Set the per-client Looker Studio embed URL (https only; empty hides the dashboard)."""
+    gate = _atrium_admin_json_gate(client)
+    if gate:
+        return gate
+    if workspace.load_workspace(client) is None:
+        return Response('{"error":"no_workspace"}', status=404, mimetype="application/json")
+    url = (request.form.get("url", "") or "").strip()
+    if url and not url.lower().startswith("https://"):
+        return Response('{"error":"must_be_https"}', status=400, mimetype="application/json")
+    workspace.set_dashboard_url(client, url)
+    return jsonify(ok=True)
+
+
 @app.route("/w/<client>/admin/calendar", methods=["POST"])
 def atrium_admin_calendar(client):
     """Add, delete, or mark-done a calendar event in place. `op` is 'add', 'delete', or 'status'."""
