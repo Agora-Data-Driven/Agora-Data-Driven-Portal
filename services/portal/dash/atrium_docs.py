@@ -127,13 +127,18 @@ def fetch_doc_text(doc_url):
 
 
 def _excerpt(text):
-    """A short, clean excerpt of the doc for the no-AI fallback (first paragraphs, trimmed)."""
-    collapsed = re.sub(r"\n{2,}", "\n", (text or "").strip())
+    """A short, clean excerpt of the doc for the no-AI fallback (one trimmed paragraph).
+
+    Collapses ALL whitespace runs (including single newlines) to single spaces so the excerpt is one
+    clean line. In the strategy card that renders as a single readable bullet, rather than splitting
+    the doc's raw title/heading lines (e.g. '1. Client Context') into separate junk bullets.
+    """
+    collapsed = re.sub(r"\s+", " ", (text or "").strip())
     if len(collapsed) <= _EXCERPT_CHARS:
         return collapsed
     cut = collapsed[:_EXCERPT_CHARS]
     # Prefer to break on a sentence/space boundary rather than mid-word.
-    for sep in (". ", "\n", " "):
+    for sep in (". ", " "):
         idx = cut.rfind(sep)
         if idx > _EXCERPT_CHARS // 2:
             return cut[: idx + (1 if sep == ". " else 0)].strip() + " …"
@@ -162,14 +167,196 @@ def generate_summary(doc_url):
     return _excerpt(text), "excerpt"
 
 
-def generate_strategy(doc_url):
-    """Produce a campaign's three strategy sections from a strategy doc. Returns (strategy, source).
+# --- No-AI document parser: split a brief into Insight vs Action by its own section headings -------
+#
+# When AI is off (no key), we still fill BOTH columns by reading the document's structure. We break
+# the doc into sections (a short heading line + the body until the next heading), classify each
+# section as Insight (the WHY -- context, audience, goals) or Action (the WHAT -- strategy, content,
+# deliverables) from keywords in its heading, and turn each section into one clean bullet. It is a
+# best-effort heuristic, not AI: quality depends on how the doc is structured, but it reliably
+# populates Action instead of leaving it blank.
 
-    strategy is a dict {"what", "why", "next"} of client-facing paragraphs (mapping positionally to
-    the Insight / Action / What to do next? columns), or None when the doc could not be read.
-    source is one of:
-      "ai"      -- Claude wrote the three sections from the doc text,
-      "excerpt" -- AI is off, so we put a trimmed excerpt of the doc in "what" (why/next blank),
+# Heading keyword -> column. Checked (substring, lower-cased) against each section heading.
+_INSIGHT_KW = (
+    "context", "insight", "audience", "target", "persona", "demographic", "problem", "challenge",
+    "pain", "background", "situation", "overview", "research", "data", "market", "opportunity",
+    "goal", "objective", "mission", "vision", "brand", "about", "who", "why",
+)
+_ACTION_KW = (
+    "action", "strateg", "plan", "approach", "execution", "tactic", "content", "pillar",
+    "deliverable", "asset", "recommend", "solution", "channel", "campaign idea", "creative", "idea",
+    "format", "produce", "cadence", "calendar", "schedule", "distribution", "post", "publish",
+    "next step", "to do", "do next", "todo", "workflow", "rollout",
+)
+
+_MAX_BULLETS = 6          # per column
+_MAX_BULLET_CHARS = 240   # trim each bullet to keep the card readable
+
+
+def _is_heading(line):
+    """True if `line` looks like a short section heading (e.g. 'Client Context' or '2. Strategy')."""
+    s = (line or "").strip()
+    if not s or len(s) > 70:
+        return False
+    body = re.sub(r"^\d+[.)]\s*", "", s).strip()        # drop a leading '1.' / '2)' number
+    if not body or len(body) > 60:
+        return False
+    if body[-1] in ".!?,;":                              # headings don't end like a sentence
+        return False
+    # Title-ish: starts with a capital and is only a few words.
+    return body[0].isupper() and len(body.split()) <= 8
+
+
+def _classify_heading(heading):
+    """Return 'insight', 'action', or None for a heading, by keyword match (action checked first)."""
+    h = (heading or "").lower()
+    for kw in _ACTION_KW:
+        if kw in h:
+            return "action"
+    for kw in _INSIGHT_KW:
+        if kw in h:
+            return "insight"
+    return None
+
+
+# Leading boilerplate labels to strip off a sentence (they stack, e.g. 'Confidence level — High —').
+_LABEL_PREFIX = re.compile(
+    r"^(insight\s*\d+|confidence level|confidence|high|medium|low|best positioning angle|"
+    r"data summary|recommendation|note|summary|goal|objective)\s*[:\-—]\s*",
+    re.IGNORECASE,
+)
+_MIN_SENTENCE_CHARS = 30
+_MIN_SENTENCE_WORDS = 5
+
+
+def _clean_sentence(s):
+    """Tidy one candidate sentence: drop fill-in underscores and any leading label prefixes."""
+    s = re.sub(r"_{2,}", " ", s or "")                   # kill '______' fill-in blanks
+    s = re.sub(r"\s+", " ", s).strip()
+    while True:                                          # labels can stack -> strip repeatedly
+        stripped = _LABEL_PREFIX.sub("", s).strip()
+        if stripped == s:
+            break
+        s = stripped
+    return s
+
+
+def _is_good_sentence(s):
+    """True if `s` reads like real content, not a heading, label, value, or fragment."""
+    if len(s) < _MIN_SENTENCE_CHARS or len(s.split()) < _MIN_SENTENCE_WORDS:
+        return False
+    letters = sum(c.isalpha() for c in s)
+    return letters >= len(s) * 0.6                       # mostly words, not blanks / symbols / numbers
+
+
+def _sentences_from(body):
+    """Split a section body into clean ONE-sentence bullets (no heading), dropping junk fragments."""
+    text = re.sub(r"_{2,}", " ", body or "")
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return []
+    text = re.sub(r"\s*(Insight\s*\d+\s*:)", r"\n\1", text, flags=re.IGNORECASE)  # break before inline labels
+    raw = []
+    for chunk in text.split("\n"):
+        raw.extend(re.split(r"(?<=[.!?])\s+", chunk))
+    out = []
+    for part in raw:
+        s = _clean_sentence(part)
+        if not _is_good_sentence(s):
+            continue
+        if len(s) > _MAX_BULLET_CHARS:                  # hard-trim an over-long sentence on a space
+            cut = s[:_MAX_BULLET_CHARS]
+            idx = cut.rfind(" ")
+            s = (cut[:idx] if idx > _MAX_BULLET_CHARS // 2 else cut).strip() + " …"
+        out.append(s)
+    return out
+
+
+def _parse_sections(text):
+    """Break the doc into [(heading, body), ...] sections by detecting short heading lines."""
+    lines = [ln.rstrip() for ln in (text or "").replace("\r\n", "\n").split("\n")]
+    sections, heading, body = [], None, []
+    for ln in lines:
+        if not ln.strip():
+            continue
+        if _is_heading(ln):
+            if heading is not None or body:
+                sections.append((heading, " ".join(body).strip()))
+            heading = re.sub(r"^\d+[.)]\s*", "", ln.strip()).rstrip(":").strip()
+            body = []
+        else:
+            body.append(ln.strip())
+    if heading is not None or body:
+        sections.append((heading, " ".join(body).strip()))
+    # Drop a leading title-only section (heading, no body) -- usually the document title.
+    return [(h, b) for (h, b) in sections if (h or b)]
+
+
+def _dedupe(bullets):
+    """Drop duplicate bullets (case-insensitive), preserving first-seen order."""
+    seen, out = set(), []
+    for b in bullets:
+        key = b.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(b)
+    return out
+
+
+def split_doc_to_sections(text):
+    """Heuristically split a brief into Insight / Action bullet lists. Returns {"what", "why"}.
+
+    No AI: classifies each document section by its heading keywords (context/audience/goals ->
+    Insight; strategy/content/deliverables -> Action), then emits each section's body as clean
+    ONE-sentence bullets (the heading itself is NOT shown -- it only decides the column). Junk
+    fragments (labels, values, fill-in blanks, headings) are dropped. Sections with an unrecognised
+    heading go to Insight until the first Action section is seen, then to Action (the natural brief
+    flow: context first, then plan). If one column ends up empty, bullets are split in half so both fill.
+    """
+    sections = _parse_sections(text)
+    # Drop leading title-only (no body) sections -- typically the document title line itself.
+    while sections and not sections[0][1]:
+        sections.pop(0)
+    if not sections:
+        return {"what": _excerpt(text), "why": ""}
+
+    insight, action, seen_action = [], [], False
+    for heading, body in sections:
+        bullets = _sentences_from(body)
+        if not bullets:
+            continue
+        kind = _classify_heading(heading)
+        if kind == "action":
+            seen_action = True
+            action.extend(bullets)
+        elif kind == "insight":
+            insight.extend(bullets)
+        else:
+            (action if seen_action else insight).extend(bullets)
+
+    insight, action = _dedupe(insight), _dedupe(action)
+
+    # If everything landed in one column, split the bullets in half so both columns populate.
+    if insight and not action:
+        mid = (len(insight) + 1) // 2
+        insight, action = insight[:mid], insight[mid:]
+    elif action and not insight:
+        mid = (len(action) + 1) // 2
+        insight, action = action[:mid], action[mid:]
+
+    return {
+        "what": "\n".join(insight[:_MAX_BULLETS]).strip(),
+        "why": "\n".join(action[:_MAX_BULLETS]).strip(),
+    }
+
+
+def generate_strategy(doc_url):
+    """Produce a campaign's two strategy sections from a strategy doc. Returns (strategy, source).
+
+    strategy is a dict {"what", "why"} of client-facing bullet lists (mapping positionally to the
+    Insight / Action columns), or None when the doc could not be read. source is one of:
+      "ai"      -- Claude wrote the two sections from the doc text,
+      "parsed"  -- AI is off, so we split the doc into Insight/Action by its own section headings,
       "none"    -- the doc could not be read (disabled / unshared / no URL).
     Never raises: every failure degrades so the caller can still create the campaign (with the doc
     link saved) and let the admin fill the sections by hand.
@@ -183,6 +370,6 @@ def generate_strategy(doc_url):
     except Exception:
         sections = None
     if sections:
-        return {"what": sections.get("what", ""), "why": sections.get("why", ""),
-                "next": sections.get("next", "")}, "ai"
-    return {"what": _excerpt(text), "why": "", "next": ""}, "excerpt"
+        return {"what": sections.get("what", ""), "why": sections.get("why", "")}, "ai"
+    # No AI: split the document by its own structure so BOTH columns fill (Action no longer blank).
+    return split_doc_to_sections(text), "parsed"

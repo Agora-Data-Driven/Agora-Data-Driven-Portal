@@ -575,7 +575,7 @@ def add_campaign(client, channel, name, eyebrow="", strategy=None, ai_summary=""
             "channel": channel,
             "name": name or "(untitled campaign)",
             "eyebrow": eyebrow or "",
-            "strategy": strategy or {"what": "", "why": "", "next": ""},
+            "strategy": strategy or {"what": "", "why": ""},
             "ai_summary": ai_summary or "",
             "strategy_doc": strategy_doc or "",
             "content": [],

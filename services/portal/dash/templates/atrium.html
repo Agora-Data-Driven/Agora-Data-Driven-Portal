@@ -297,15 +297,17 @@
     .ax-campswitch-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ax-violet-d); display: inline-flex; align-items: center; gap: 5px; }
     .ax-campswitch-label .ax-ic { width: 15px; height: 15px; }
     .ax-campswitch-hint { font-size: 12px; color: var(--ax-sub); width: 100%; text-align: right; }
-    .ax-strategy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; padding: 0; overflow: hidden; }
+    .ax-strategy { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; padding: 0; overflow: hidden; }
     @media (max-width: 820px) { .ax-strategy { grid-template-columns: 1fr; } }
     .ax-strat-col { padding: 18px; border-left: 1px solid var(--ax-line); }
     .ax-strat-col:first-child { border-left: 0; }
     .ax-strat-col h3 { font-size: 12px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; margin: 0 0 8px; }
     .ax-strat-col.what h3 { color: var(--ax-ink); }
     .ax-strat-col.why h3 { color: var(--ax-violet-d); }
-    .ax-strat-col.next h3 { color: var(--ax-green-d); }
     .ax-strat-col p { margin: 0; font-size: 13.5px; color: #2b2f38; }
+    .ax-strat-list { margin: 0; padding-left: 18px; list-style: disc; }
+    .ax-strat-list li { font-size: 13.5px; color: #2b2f38; margin: 0 0 6px; line-height: 1.5; }
+    .ax-strat-list li:last-child { margin-bottom: 0; }
 
     .ax-filter { display: flex; gap: 8px; margin: 20px 0 14px; flex-wrap: wrap; }
     .ax-chip { font: inherit; font-size: 12.5px; font-weight: 700; padding: 7px 13px; border-radius: var(--ax-pill); border: 1px solid var(--ax-line); background: var(--ax-white); color: var(--ax-sub); cursor: pointer; }
@@ -967,9 +969,16 @@
             </a>
             {% endif %}
             <div class="ax-card ax-strategy">
-              <div class="ax-strat-col what"><h3>Insight</h3><p data-strat="what">{{ c.strategy.what }}</p></div>
-              <div class="ax-strat-col why"><h3>Action</h3><p data-strat="why">{{ c.strategy.why }}</p></div>
-              <div class="ax-strat-col next"><h3>What to do next?</h3><p data-strat="next">{{ c.strategy.next }}</p></div>
+              <div class="ax-strat-col what"><h3>Insight</h3>
+                <ul class="ax-strat-list" data-strat="what">
+                  {% for line in (c.strategy.what or '').split('\n') %}{% if line.strip() %}<li>{{ line.strip().lstrip('-•*▪◦ ').strip() }}</li>{% endif %}{% endfor %}
+                </ul>
+              </div>
+              <div class="ax-strat-col why"><h3>Action</h3>
+                <ul class="ax-strat-list" data-strat="why">
+                  {% for line in (c.strategy.why or '').split('\n') %}{% if line.strip() %}<li>{{ line.strip().lstrip('-•*▪◦ ').strip() }}</li>{% endif %}{% endfor %}
+                </ul>
+              </div>
             </div>
 
             {% if is_superadmin %}
@@ -983,9 +992,8 @@
                 <input class="ax-editbox" data-sf="name" value="{{ c.name }}" placeholder="Campaign name">
                 <input class="ax-editbox" data-sf="eyebrow" value="{{ c.eyebrow }}" placeholder="Eyebrow">
               </div>
-              <textarea class="ax-editbox" data-sf="what" placeholder="Insight — why we're running this campaign">{{ c.strategy.what }}</textarea>
-              <textarea class="ax-editbox" data-sf="why" placeholder="Action — our solution">{{ c.strategy.why }}</textarea>
-              <textarea class="ax-editbox" data-sf="next" placeholder="What to do next? — what to make (e.g. Lead Magnet, Static Post)">{{ c.strategy.next }}</textarea>
+              <textarea class="ax-editbox" data-sf="what" placeholder="Insight — why this campaign matters (one bullet per line)">{{ c.strategy.what }}</textarea>
+              <textarea class="ax-editbox" data-sf="why" placeholder="Action — our solution (one bullet per line)">{{ c.strategy.why }}</textarea>
               <div class="ax-actions">
                 <button class="ax-btn violet small" type="button" data-stratsave="{{ c.id }}">Save strategy</button>
                 <button class="ax-btn ghost small" type="button" data-stratcancel="{{ c.id }}">Cancel</button>
@@ -1264,7 +1272,7 @@
             <div class="ax-strat-doc" style="margin-top:14px">
               <span class="ax-doc-label">{{ ic('sparkle') }} Strategy doc → AI writes the strategy</span>
               <input class="ax-strat-doc-in" data-ac="strategy_doc" placeholder="Paste a Google Doc link…">
-              <p class="ax-doc-help">AI reads the doc and writes the &ldquo;Insight / Action / What to do next?&rdquo; sections for you. The client also gets a &ldquo;View the full breakdown&rdquo; link to the doc. Optional &mdash; you can skip it and write the strategy by hand later.</p>
+              <p class="ax-doc-help">AI reads the doc and writes the &ldquo;Insight / Action&rdquo; bullet points for you. The client also gets a &ldquo;View the full breakdown&rdquo; link to the doc. Optional &mdash; you can skip it and write the strategy by hand later.</p>
             </div>
             <button class="ax-btn violet small" type="button" data-addcampaignbtn="{{ chan }}" style="margin-top:14px">{{ ic('sparkle') }} Add campaign</button>
               </div>
@@ -2094,7 +2102,7 @@
       var id = btn.getAttribute("data-docgen");
       var input = document.querySelector('[data-docurl="' + id + '"]');
       btn.addEventListener("click", function () {
-        adminMsg("Reading the doc and writing a summary…", true);
+        adminMsg("Reading the doc and writing the strategy…", true);
         adminAction("/admin/generate-summary", { campaign_id: id, doc_url: input ? input.value : "" }, btn);
       });
     });

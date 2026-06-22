@@ -845,11 +845,10 @@ _ATRIUM_MEDIA_EXT.update(_ATRIUM_VIDEO_EXT)
 
 
 def _strategy_from_form():
-    """Read the three strategy columns from the request form into a dict."""
+    """Read the two strategy columns (Insight / Action) from the request form into a dict."""
     return {
         "what": request.form.get("what", "").strip(),
         "why": request.form.get("why", "").strip(),
-        "next": request.form.get("next", "").strip(),
     }
 
 
@@ -889,9 +888,9 @@ def atrium_admin_strategy_doc(client):
 
 @app.route("/w/<client>/admin/generate-summary", methods=["POST"])
 def atrium_admin_generate_summary(client):
-    """Read the campaign's attached Google Doc and (re)write its What/Why/Next strategy. Always degrades.
+    """Read the campaign's attached Google Doc and (re)write its Insight/Action strategy. Always degrades.
 
-    This regenerates the three strategy sections from the doc for an EXISTING campaign -- the same
+    This regenerates the two strategy sections from the doc for an EXISTING campaign -- the same
     thing the Add-campaign modal does at creation -- so an admin can refresh them after editing the
     doc (or after enabling AI). Degrades: an unreadable doc returns ok:false with share guidance.
     """
@@ -1601,7 +1600,6 @@ def admin_atrium_campaign(client):
     strategy = {
         "what": request.form.get("what", "").strip(),
         "why": request.form.get("why", "").strip(),
-        "next": request.form.get("next", "").strip(),
     }
     ai_summary = request.form.get("ai_summary", "").strip()
     if campaign_id:

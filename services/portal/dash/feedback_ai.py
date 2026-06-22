@@ -122,14 +122,14 @@ def _parse_sections_json(raw):
 
 
 def summarize_strategy_sections(doc_text):
-    """Turn a strategy doc into a campaign's three client-facing sections. Returns a dict, or None.
+    """Turn a strategy doc into a campaign's two client-facing sections. Returns a dict, or None.
 
-    The dict has keys "what", "why", "next" -- short, warm, plain-English paragraphs that populate a
-    campaign's "Insight / Action / What to do next?" strategy card (the keys keep their original
-    names for backward compatibility, but map positionally to Insight / Action / What to do next?).
-    Used by Agora Atrium's "generate strategy from doc" action (atrium_docs.generate_strategy).
-    No-op (returns None) unless enrichment is enabled, configured, and the SDK is installed -- the
-    caller then falls back to a plain excerpt of the doc.
+    The dict has keys "what" and "why" -- short bullet lists (newline-separated, one bullet per line)
+    that populate a campaign's "Insight / Action" strategy card (the keys keep their original names
+    for backward compatibility, but map positionally to Insight / Action). Used by Agora Atrium's
+    "generate strategy from doc" action (atrium_docs.generate_strategy). No-op (returns None) unless
+    enrichment is enabled, configured, and the SDK is installed -- the caller then falls back to a
+    plain excerpt of the doc.
     """
     client = _client()
     if client is None or not (doc_text or "").strip():
@@ -137,20 +137,26 @@ def summarize_strategy_sections(doc_text):
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=700,
+            max_tokens=900,
             system=(
                 "You write the AGORA marketing team's client-facing campaign strategy from an "
-                "internal strategy document. Produce exactly three short, warm, plain-English "
-                "paragraphs (2-3 sentences each, no jargon, no headings, no markdown):\n"
-                "  what -- the Insight: WHY we are running this campaign (the audience need, gap, or "
-                "data point that makes it worth doing),\n"
-                "  why  -- the Action: WHAT our solution is (the approach / angle we are taking to "
-                "act on that insight),\n"
-                "  next -- What to do next?: the concrete deliverables we will MAKE, named explicitly "
-                "(e.g. Lead Magnet, Static Post, Email, Blog Post). Choose deliverables that follow "
-                "directly from the Insight and Action above.\n"
-                "Respond with ONLY a JSON object of the form "
-                '{\"what\": \"...\", \"why\": \"...\", \"next\": \"...\"} -- no preamble, no code fences.'
+                "internal strategy document. Read the WHOLE document, then produce exactly two "
+                "sections, each a tight bullet list (3 to 5 bullets, ONE bullet per line, each bullet "
+                "a single complete plain-English sentence). Rules for every bullet:\n"
+                "  - Be specific and concrete: name the actual audience, goal, channel, format, or "
+                "angle from the doc -- never a vague generality.\n"
+                "  - Be self-contained: do NOT carry over the document's title, section numbering, or "
+                "headings (e.g. '1. Client Context'); rewrite the substance in plain words.\n"
+                "  - No jargon, no preamble, no markdown bullet characters -- just the sentence.\n"
+                "The two sections:\n"
+                "  what -- the Insight: WHY this campaign matters -- the audience need, market gap, or "
+                "data point that makes it worth doing.\n"
+                "  why  -- the Action: WHAT we are doing about it -- the concrete approach, content "
+                "angles, and formats we will run to act on that insight.\n"
+                "Cover the document completely; do not stop early or leave a section thin. Respond "
+                "with ONLY a JSON object of the form "
+                '{\"what\": \"...\", \"why\": \"...\"} where each value is its bullets separated by '
+                "newline (\\n) characters -- no preamble, no code fences."
             ),
             messages=[{"role": "user", "content": doc_text[:12000]}],
         )
@@ -158,7 +164,7 @@ def summarize_strategy_sections(doc_text):
         data = _parse_sections_json("".join(parts).strip())
         if not isinstance(data, dict):
             return None
-        out = {k: str(data.get(k, "") or "").strip() for k in ("what", "why", "next")}
+        out = {k: str(data.get(k, "") or "").strip() for k in ("what", "why")}
         return out if any(out.values()) else None
     except Exception:
         return None

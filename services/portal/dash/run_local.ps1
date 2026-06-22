@@ -37,6 +37,50 @@ if (-not (Test-Path $py)) {
     & $py -m pip install --quiet "Flask==3.0.3" "requests==2.34.2"
 }
 
+# 1b. AI strategy generation is OPTIONAL and OFF by default. It writes the Insight + Action bullet
+#     points from the attached Google Doc; without it, "Generate strategy" can only drop a raw doc
+#     excerpt into Insight and leaves Action blank (exactly the empty-Action symptom).
+#
+#     The key is read, in order, from: (1) the ANTHROPIC_API_KEY environment variable, or (2) a
+#     gitignored local key file so the DOUBLE-CLICKABLE .cmd works too (a fresh .cmd process does NOT
+#     inherit an env var you typed into some other shell). Looked-for files (first one wins):
+#         <repo>\.anthropic_key   ·   services\portal\dash\.anthropic_key   ·   <repo>\.env (ANTHROPIC_API_KEY=...)
+#     All three names are already covered by .gitignore, so the key is never committed.
+if (-not $env:ANTHROPIC_API_KEY) {
+    $keyFiles = @(
+        (Join-Path $repo ".anthropic_key"),
+        (Join-Path $dash ".anthropic_key")
+    )
+    foreach ($kf in $keyFiles) {
+        if (Test-Path $kf) {
+            $k = (Get-Content -Raw $kf).Trim()
+            if ($k) { $env:ANTHROPIC_API_KEY = $k; Write-Host "[run_local] loaded ANTHROPIC_API_KEY from $kf" -ForegroundColor DarkGray; break }
+        }
+    }
+}
+if (-not $env:ANTHROPIC_API_KEY) {
+    $envFile = Join-Path $repo ".env"
+    if (Test-Path $envFile) {
+        $line = (Get-Content $envFile | Where-Object { $_ -match '^\s*ANTHROPIC_API_KEY\s*=' } | Select-Object -First 1)
+        if ($line) {
+            $k = ($line -replace '^\s*ANTHROPIC_API_KEY\s*=\s*', '').Trim().Trim('"').Trim("'")
+            if ($k) { $env:ANTHROPIC_API_KEY = $k; Write-Host "[run_local] loaded ANTHROPIC_API_KEY from $envFile" -ForegroundColor DarkGray }
+        }
+    }
+}
+if ($env:ANTHROPIC_API_KEY) {
+    $env:FEEDBACK_AI_ENABLED = "1"
+    & $py -c "import anthropic" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[run_local] installing 'anthropic' into .venv-portal for AI strategy generation ..."
+        & $py -m pip install --quiet "anthropic"
+    }
+    Write-Host "[run_local] AI strategy generation ENABLED -- 'Generate strategy' will write Insight + Action." -ForegroundColor Green
+} else {
+    Write-Host "[run_local] AI strategy generation OFF -- 'Generate strategy' only excerpts the doc into Insight; Action stays blank." -ForegroundColor Yellow
+    Write-Host "[run_local]   To enable it, put your key in a file named  .anthropic_key  at the repo root, then re-run." -ForegroundColor Yellow
+}
+
 # 2. Point the data layer at a throwaway local folder (both registry and workspaces).
 $data = Join-Path $repo ".local_portal_data"
 New-Item -ItemType Directory -Force -Path $data | Out-Null
