@@ -288,18 +288,34 @@ if ($NoDeploy) {
 } elseif ($plan.Count -eq 0) {
     Write-Host "[OK] no deployable service changed -- nothing to deploy." -ForegroundColor Green
 } else {
+    # Validate the gcloud token UP FRONT (not just that an account is configured) -- an
+    # expired token only fails deep inside the build, after main is already landed. Print-
+    # access-token is a cheap, side-effect-free probe that fails fast if reauth is needed.
     $acct = (gcloud config get-value account 2>$null)
-    if ([string]::IsNullOrWhiteSpace($acct) -or $acct -eq '(unset)') {
-        Die "not logged into gcloud -- run 'gcloud auth login' then re-run (main is already landed; re-run is safe)."
+    $null = gcloud auth print-access-token 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($acct) -or $acct -eq '(unset)') {
+        Write-Host "[ERROR] gcloud is not authenticated (account='$acct', token invalid)." -ForegroundColor Red
+        Write-Host "        main is already landed ($(git rev-parse --short HEAD)) -- nothing was deployed yet." -ForegroundColor Yellow
+        Write-Host "        Run 'gcloud auth login', then deploy the service(s) below DIRECTLY:" -ForegroundColor Yellow
+        foreach ($s in $plan) { Write-Host "          $($s.Script)" }
+        exit 1
     }
     Write-Host "[..] Deploy plan ($($plan.Count) service(s), as $acct):" -ForegroundColor Cyan
     foreach ($s in $plan) { Write-Host "      - $($s.Service)  ->  $($s.Script)" }
-    foreach ($s in $plan) {
+    for ($i = 0; $i -lt $plan.Count; $i++) {
+        $s = $plan[$i]
         Write-Host ""
         Write-Host "[..] Deploying $($s.Service)" -ForegroundColor Cyan
         & $s.Script
         if ($LASTEXITCODE -ne 0) {
-            Die "deploy FAILED for $($s.Service) ($($s.Script), exit $LASTEXITCODE). main is already landed; fix the cause and re-run -- only the un-deployed services will redeploy."
+            # main is already landed, so the change is IN main -- re-running THIS script finds
+            # no diff and will NOT redeploy. The correct recovery is to run the remaining
+            # deploy script(s) directly after fixing the cause.
+            Write-Host "[ERROR] deploy FAILED for $($s.Service) (exit $LASTEXITCODE)." -ForegroundColor Red
+            Write-Host "        main is already landed ($(git rev-parse --short HEAD)); the change is IN main, so re-running" -ForegroundColor Yellow
+            Write-Host "        merge-branches.ps1 will NOT redeploy. Fix the cause, then run the remaining script(s) directly:" -ForegroundColor Yellow
+            for ($j = $i; $j -lt $plan.Count; $j++) { Write-Host "          $($plan[$j].Script)" }
+            exit 1
         }
         Write-Host "[OK] deployed $($s.Service)" -ForegroundColor Green
     }
