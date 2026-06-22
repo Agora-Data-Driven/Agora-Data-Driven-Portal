@@ -140,6 +140,25 @@ function Resolve-DeployPlan {
     return @($out)
 }
 
+# Per-machine dev branches whose commits are ALREADY in origin/main (safe to delete).
+# CRITICAL: exclude the origin/HEAD symref -- its `:short` form is the bare "origin",
+# which is not a real branch; trying to delete it errors out and aborts the prune.
+function Get-MergedDevBranches([string[]]$Skip) {
+    git branch -r --merged origin/main --format='%(refname:short)' |
+        Where-Object { $_ -and $_ -ne 'origin/HEAD' -and $_ -ne 'origin' -and $_ -notlike '*->*' } |
+        ForEach-Object { ($_ -replace '^origin/', '').Trim() } |
+        Where-Object { $_ -and ($Skip -notcontains $_) }
+}
+
+# Delete remote branches one at a time, never aborting the batch if one is already gone.
+function Remove-RemoteBranches([string[]]$Branches) {
+    foreach ($b in $Branches) {
+        git push origin --delete $b 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-Host "    deleted origin/$b" -ForegroundColor Yellow }
+        else { Write-Host "    [warn] could not delete origin/$b (already gone?)" -ForegroundColor Yellow }
+    }
+}
+
 # =============================================================================
 # -DeleteMerged is a standalone, GATED cleanup -- it never runs the merge.
 # =============================================================================
@@ -149,14 +168,9 @@ if ($DeleteMerged) {
     Write-Host "[..] Fetching origin" -ForegroundColor Cyan
     git fetch origin --prune; Must "git fetch"
     Write-Host "[..] Deleting remote branches already contained in origin/main" -ForegroundColor Cyan
-    $alreadyMerged = git branch -r --merged origin/main --format='%(refname:short)' |
-        ForEach-Object { ($_ -replace '^origin/', '').Trim() } |
-        Where-Object { $_ -and ($skip -notcontains $_) }
+    $alreadyMerged = @(Get-MergedDevBranches $skip)
     if (-not $alreadyMerged) { Write-Host "    (none are fully merged into main yet -- nothing to delete)" -ForegroundColor Yellow; exit 0 }
-    foreach ($b in $alreadyMerged) {
-        Write-Host "    deleting origin/$b (its commits are in main)" -ForegroundColor Yellow
-        git push origin --delete $b; Must "delete origin/$b"
-    }
+    Remove-RemoteBranches $alreadyMerged
     Write-Host "[OK] pruned: $($alreadyMerged -join ', ')" -ForegroundColor Green
     exit 0
 }
@@ -327,13 +341,11 @@ if ($NoDeploy) {
 # =============================================================================
 if (-not $NoPrune) {
     git fetch origin --prune *>$null
-    $alreadyMerged = git branch -r --merged origin/main --format='%(refname:short)' |
-        ForEach-Object { ($_ -replace '^origin/', '').Trim() } |
-        Where-Object { $_ -and ($skip -notcontains $_) }
-    if ($alreadyMerged) {
+    $alreadyMerged = @(Get-MergedDevBranches $skip)
+    if ($alreadyMerged.Count -gt 0) {
         Write-Host ""
         Write-Host "[..] Pruning dev branches now contained in main: $($alreadyMerged -join ', ')" -ForegroundColor Cyan
-        foreach ($b in $alreadyMerged) { git push origin --delete $b *>$null }
+        Remove-RemoteBranches $alreadyMerged
         Write-Host "[OK] pruned." -ForegroundColor Green
     }
 }
