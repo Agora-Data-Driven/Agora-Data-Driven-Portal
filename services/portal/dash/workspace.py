@@ -714,6 +714,31 @@ def resolve_content_comment(client, content_id, comment_id):
     return _mutate(client, fn)
 
 
+def delete_content_comment(client, content_id, comment_id):
+    """Remove a single comment from a content piece's thread. Returns (content, status).
+
+    Mirrors `resolve_content_comment`: if deleting the comment leaves no remaining UNRESOLVED
+    changes-comments and the piece is still 'changes', it returns to 'awaiting' (back in the review
+    queue). Raises KeyError if the piece or comment is gone.
+    """
+    def fn(ws):
+        _camp, item = _find_content(ws, content_id)
+        if item is None:
+            raise KeyError("no content '%s'" % content_id)
+        comments = item.get("comments", [])
+        target = next((c for c in comments if c.get("id") == comment_id), None)
+        if target is None:
+            raise KeyError("no comment '%s'" % comment_id)
+        item["comments"] = [c for c in comments if c.get("id") != comment_id]
+        unresolved = [c for c in item["comments"]
+                      if c.get("kind") == "changes" and not c.get("resolved")]
+        if not unresolved and item.get("status") == "changes":
+            item["status"] = "awaiting"
+            item["decided_at"] = now_iso()
+        return item, item.get("status")
+    return _mutate(client, fn)
+
+
 def set_content_image(client, content_id, object_name, mime):
     """Record that a content piece now has an uploaded creative (object name + mime). Returns it."""
     def fn(ws):

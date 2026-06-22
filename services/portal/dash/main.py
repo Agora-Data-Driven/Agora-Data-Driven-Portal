@@ -1059,6 +1059,21 @@ def atrium_admin_content_comment(client):
     return jsonify(ok=True, comment=comment)
 
 
+@app.route("/w/<client>/admin/delete-comment", methods=["POST"])
+def atrium_admin_delete_comment(client):
+    """Delete a single comment from a content piece's thread (team-only); may return it to 'awaiting'."""
+    gate = _atrium_admin_json_gate(client)
+    if gate:
+        return gate
+    content_id = request.form.get("content_id", "").strip()
+    comment_id = request.form.get("comment_id", "").strip()
+    try:
+        _item, status = workspace.delete_content_comment(client, content_id, comment_id)
+    except KeyError:
+        return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    return jsonify(ok=True, status=status)
+
+
 @app.route("/w/<client>/admin/upload-creative", methods=["POST"])
 def atrium_admin_upload_creative(client):
     """Upload an image or short video creative for a content piece (private object; image ≤8MB, video ≤30MB)."""

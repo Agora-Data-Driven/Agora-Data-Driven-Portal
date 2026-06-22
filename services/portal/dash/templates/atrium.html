@@ -551,6 +551,9 @@
     .ax-com-resolve { margin-top: 7px; }
     .ax-com-resolve .ax-btn { padding: 5px 11px; }
     .ax-com-resolve[hidden] { display: none; }
+    /* Team-only: delete a single comment from the thread. */
+    .ax-com-del { margin-top: 7px; align-self: flex-end; }
+    .ax-com-del .ax-btn { padding: 4px 10px; }
     .ax-com .ax-com-who { font-size: 10.5px; font-weight: 800; opacity: .75; margin-bottom: 2px; }
     .ax-com .ax-com-when { font-size: 10px; opacity: .6; margin-top: 4px; }
     .ax-com-form { display: flex; gap: 8px; align-items: flex-end; }
@@ -1138,6 +1141,9 @@
                       <div class="ax-com-resolve" data-comresolvewrap{% if cm.resolved %} hidden{% endif %}>
                         <button class="ax-btn ghost small" type="button" data-comresolve="{{ cm.id }}">{{ ic('check') }} Resolve</button>
                       </div>
+                      {% endif %}
+                      {% if is_superadmin and is_org and cm.id %}
+                      <div class="ax-com-del"><button class="ax-btn danger small" type="button" data-comdelete="{{ cm.id }}">Delete</button></div>
                       {% endif %}
                     </div>
                     {% endfor %}
@@ -1904,6 +1910,27 @@
   }
   qsa("[data-comresolve]").forEach(wireResolve);
 
+  // ---- Team-only: delete a single comment from the thread ----
+  // Removes the bubble in place; if deleting the last open changes-comment, the server may return the
+  // piece to "awaiting" and we reflect that on the card. Only rendered for super-admins.
+  function wireDelete(btn) {
+    btn.addEventListener("click", function () {
+      if (!window.confirm("Delete this comment? This cannot be undone.")) { return; }
+      var bubble = btn.closest(".ax-com");
+      var box = btn.closest("[data-comments]");
+      var card = box ? box.closest("[data-content]") : null;
+      var cid = card ? card.getAttribute("data-content") : "";
+      btn.setAttribute("disabled", "disabled");
+      post("/admin/delete-comment", { content_id: cid, comment_id: btn.getAttribute("data-comdelete") })
+        .then(function (data) {
+          if (bubble && bubble.parentNode) { bubble.parentNode.removeChild(bubble); }
+          if (data && data.status) { setCardStatus(card, data.status); }
+        })
+        .catch(function () { btn.removeAttribute("disabled"); });
+    });
+  }
+  qsa("[data-comdelete]").forEach(wireDelete);
+
   qsa("[data-comments]").forEach(function (wrap) {
     var id = wrap.getAttribute("data-comments");
     var card = wrap.closest("[data-content]");
@@ -1931,6 +1958,12 @@
         var rb = document.createElement("button"); rb.className = "ax-btn ghost small"; rb.type = "button";
         rb.setAttribute("data-comresolve", comId); rb.textContent = "Resolve";
         rw.appendChild(rb); el.appendChild(rw); wireResolve(rb);
+      }
+      if (isAdmin && comId && card && card.classList.contains("ax-collapse")) {
+        var dw = document.createElement("div"); dw.className = "ax-com-del";
+        var db = document.createElement("button"); db.className = "ax-btn danger small"; db.type = "button";
+        db.setAttribute("data-comdelete", comId); db.textContent = "Delete";
+        dw.appendChild(db); el.appendChild(dw); wireDelete(db);
       }
       if (list) { list.appendChild(el); }
     }
