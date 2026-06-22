@@ -154,6 +154,25 @@ def workspace_exists(client):
     return _read_object(_object_name(client)) is not None
 
 
+def delete_workspace(client):
+    """Delete a client's workspace JSON object (no error if absent). Used when removing a client.
+
+    Only removes the workspace document itself; any uploaded creatives live under their own
+    'workspace/creatives/<client>/' prefix and are left for a separate sweep (the bucket is private,
+    so orphaned objects are inert -- never publicly reachable)."""
+    _delete_object(_object_name(client))
+
+
+def set_client_logo(client, logo_markup):
+    """Replace the client's logo (brand.client_logo) with `logo_markup`, leaving everything else
+    untouched. `logo_markup` is self-contained HTML/SVG (e.g. an <img> data: URI) rendered with
+    |safe in the workspace + team console. Returns the new markup. Raises KeyError if no workspace."""
+    def fn(ws):
+        ws.setdefault("brand", {})["client_logo"] = logo_markup
+        return ws["brand"]["client_logo"]
+    return _mutate(client, fn)
+
+
 # --- Uploaded creatives (binary objects in the SAME private bucket) -----------------------------
 # A creative the team uploads for a content piece is stored as its OWN object alongside the
 # workspace JSON (so a multi-KB image never bloats workspace/<c>.json, which is rewritten in full on

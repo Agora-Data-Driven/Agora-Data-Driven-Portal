@@ -136,6 +136,23 @@ def add_client(key, name=None, registry=None):
     return reg
 
 
+def remove_client(key, registry=None):
+    """Remove a client from the registry (a delete). Returns True if a client was removed, else False.
+
+    Only drops the registry entry (login + listing). The client's Atrium workspace object is a
+    separate concern -- the caller deletes it via workspace.delete_workspace if desired. Persists
+    only when something actually changed, so calling it on an unknown key is a cheap no-op.
+    """
+    reg = registry if registry is not None else load_registry()
+    before = reg.get("clients", [])
+    after = [c for c in before if c.get("key") != key]
+    if len(after) == len(before):
+        return False  # nothing matched -- do not rewrite the registry
+    reg["clients"] = after
+    save_registry(reg)
+    return True
+
+
 def set_client_name(key, name, registry=None):
     """Update a client's display name in the registry (a rename). No-op if the client is unknown,
     the name is blank, or it is already current. Persists and returns the registry."""

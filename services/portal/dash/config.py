@@ -8,8 +8,10 @@ first snapshot.
 What is here at standup:
   * The sole agency, `agora` ("Agora Data Driven"). Its client list starts EMPTY -- clients are
     added later through the portal admin/super-admin UI, not hand-edited here.
-  * The `template` client entry, so the portal has at least one dashboard to link to from day one.
-    Its dashboard is the Cloud Run service `template-dash`, served at template.agoradatadriven.com.
+  * NO seeded clients. The registry starts with an empty client list; real clients are created
+    through the Workspaces console (/admin/atrium/new -> onboard_client), which appends entries of
+    the shape documented below. (We used to seed a placeholder `template` client; it was a stand-in
+    with no real workspace, so it is no longer seeded -- a fresh portal starts clean.)
 
 Naming derivation (kept consistent with the rest of the monorepo, derived from a client key `<c>`):
   * subdomain:    <c>.agoradatadriven.com
@@ -32,25 +34,23 @@ AGENCIES = [
     },
 ]
 
-# Clients (dashboards) the portal knows about. We seed only `template` so the portal links to a
-# real dashboard on day one. Additional clients are added through the UI (store.add_client), which
-# appends entries of exactly this shape.
-CLIENTS = [
-    {
-        "key": "template",
-        "name": "Template",
-        "subdomain": "template.agoradatadriven.com",
-        # The upstream Cloud Run dashboard service this client maps to. The portal reverse-proxies
-        # it under /d/template/ and logs into it server-side using template-dash-password.
-        "dash_service": "template-dash",
-        # Portal-login material for this client lives here once set in the UI (set_client_password):
-        #   "pw_hash":  pbkdf2_hmac hex digest (what verify_portal_login checks)
-        #   "pw_salt":  hex salt for that hash
-        #   "pw_plain": RECOVERABLE plaintext kept beside the hash so the super-admin console can
-        #               reveal it (see store.py for the deliberate trade-off comment).
-        # Left unset at seed time; the bootstrap/super-admin password path covers first login.
-    },
-]
+# Clients (dashboards) the portal knows about. This starts EMPTY: clients are created through the
+# Workspaces console (store.add_client via onboard_client), which appends entries of exactly the
+# shape below:
+#     {
+#         "key": "honeytribe",
+#         "name": "Honey Tribe",
+#         "subdomain": "honeytribe.agoradatadriven.com",
+#         # The upstream Cloud Run dashboard service this client maps to. The portal reverse-proxies
+#         # it under /d/<key>/ and logs into it server-side using <key>-dash-password.
+#         "dash_service": "honeytribe-dash",
+#         # Portal-login material is set in the UI (set_client_password):
+#         #   "pw_hash":  pbkdf2_hmac hex digest (what verify_portal_login checks)
+#         #   "pw_salt":  hex salt for that hash
+#         #   "pw_plain": RECOVERABLE plaintext kept beside the hash so the super-admin console can
+#         #               reveal it (see store.py for the deliberate trade-off comment).
+#     }
+CLIENTS = []
 
 
 def initial_registry():

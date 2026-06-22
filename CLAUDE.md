@@ -131,8 +131,14 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
   dashboard, leadgen, organic, calendar, conversations, settings) gated `authed()`+`can_open(<c>)`;
   client POSTs `/w/<c>/{approve,request-changes,save-note,comment,resolve-comment,send-message,save-notify}` +
   creative GET above; admin POSTs `/w/<c>/admin/*` gated `is_superadmin()`. Team console
-  `/admin/atrium[/<c>][/campaign|content|conversation|reply|metrics]` gated `is_superadmin()`. The
-  portal landing shows **Open workspace** beside **Open dashboard**.
+  `/admin/atrium[/<c>][/campaign|content|conversation|reply|metrics|logo|delete]` gated
+  `is_superadmin()`. The console **landing** (`/admin/atrium`) is one card per client showing the
+  client's logo on the right with an **Upload logo** control (POST `/admin/atrium/<c>/logo` — embeds
+  the image inline as a `brand.client_logo` `<img>` data-URI, ≤512 KB; same posture as seeded logos)
+  and a confirmed **Delete** control (POST `/admin/atrium/<c>/delete` — `store.remove_client` +
+  `workspace.delete_workspace`). **Add a new client** asks ONLY for a display name (key auto-derives,
+  password auto-generates) and on success redirects STRAIGHT to the new client's blank `/w/<c>/`.
+  The portal landing shows **Open workspace** beside **Open dashboard**.
 - **Strategy doc → AI strategy (optional, opt-in):** an admin attaches a Google Doc to a campaign and
   clicks "Generate strategy". `dash/atrium_docs.py` reads it (public-export fetch by default, or the
   **Google Drive API** when `ATRIUM_DOCS_ENABLED=1`) and `feedback_ai.summarize_strategy_sections`
@@ -204,9 +210,18 @@ with `--no-invoker-iam-check` and do their own password/SSO auth in-process.
 Multiple developers (each with their own Claude Code) work in parallel. To keep merges clean, follow
 **`docs/dev-workflow.md`**: each machine pushes to its own branch with `tools/push-branch.ps1`, opens a
 PR (CI runs the gates in `.github/workflows/ci.yml` — esprima JS gate, `py_compile`, the off-cloud
-Atrium tests), and only green PRs merge to `main`. `tools/merge-branches.ps1` automates the safe path
-(fetch → integration branch → run CI tests → stop for a human on any conflict; never auto-deletes a
-branch until its work is verified-merged). Branch protection on `main` makes the CI check required.
+Atrium tests), and only green PRs merge to `main`.
+
+**The release SOP is agent-driven:** a developer drops `tools/merge-branches.ps1` into Claude Code and
+asks it to merge + deploy. The script runs the whole pipeline to live — fetch → `integration/merge`
+off `origin/main` → run the CI tests → **land on `main`** → **auto-detect which services changed and
+deploy each** (the path → deploy-script mapping lives in the script's `Resolve-DeployPlan`) → prune the
+merged branches. It STOPS only where judgment is needed — a real merge conflict or a red test — and
+hands off to the agent (see the AGENT RUNBOOK header in the script); the agent resolves it and re-runs.
+`-DryRun` previews the land+deploy plan without changing anything; `-NoPush`/`-NoDeploy` recover the
+review-first behavior; `-DeleteMerged` is the standalone prune. **Note:** enabling GitHub branch
+protection on `main` (PR-required, per `docs/dev-workflow.md` step 5) would block this direct-to-main
+land — keep protection off, or run with `-NoPush` and merge via PR, if you turn it on.
 
 ## Freshness contract (binding)
 

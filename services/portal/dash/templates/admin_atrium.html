@@ -69,13 +69,31 @@
     .tag { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
     .tag.paid { background: var(--ag-purple-bg); color: var(--ag-purple-d); }
     .tag.organic { background: var(--ag-green-bg); color: var(--ag-green-d); }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-    a.card { display: block; text-decoration: none; color: var(--ag-ink); background: var(--ag-white);
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+    /* A client card: a clickable body on the LEFT (name + status) and a logo column on the RIGHT
+       (the logo itself + an "Upload logo" affordance). A faint delete control sits top-right. */
+    .card { position: relative; display: flex; align-items: center; gap: 14px; background: var(--ag-white);
       border: 1px solid var(--ag-line); border-radius: 14px; padding: 18px; box-shadow: var(--ag-shadow);
       transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
-    a.card:hover { transform: translateY(-2px); border-color: #d7dae3; }
-    a.card .name { font-weight: 800; }
-    a.card .st { font-size: 12px; color: var(--ag-muted); margin-top: 6px; }
+    .card:hover { transform: translateY(-2px); border-color: #d7dae3; }
+    .card .card-main { flex: 1 1 auto; min-width: 0; text-decoration: none; color: var(--ag-ink); padding-right: 18px; }
+    .card .name { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card .st { font-size: 12px; color: var(--ag-muted); margin-top: 6px; }
+    /* Logo column on the right. */
+    .card .card-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 76px; }
+    .card .card-logo { width: 76px; height: 56px; display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--ag-line); border-radius: 10px; background: var(--ag-canvas); overflow: hidden; padding: 6px; }
+    .card .card-logo img, .card .card-logo svg { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; mix-blend-mode: multiply; }
+    .card .logo-up { margin: 0; }
+    .card .mini-btn { display: inline-block; cursor: pointer; font-size: 11px; font-weight: 700; color: var(--ag-purple-d);
+      border: 1px solid var(--ag-line); border-radius: 999px; padding: 4px 10px; background: var(--ag-white);
+      transition: border-color .12s, background .12s; }
+    .card .mini-btn:hover { border-color: var(--ag-purple); background: var(--ag-purple-bg); }
+    /* Delete control: a quiet "x" in the top-right corner that reddens on hover (confirmed in JS). */
+    .card .card-del { position: absolute; top: 8px; right: 10px; margin: 0; }
+    .card .del-x { border: 0; background: transparent; cursor: pointer; color: #c2c7d0; font-size: 18px;
+      line-height: 1; padding: 4px 6px; border-radius: 8px; transition: color .12s, background .12s; }
+    .card .del-x:hover { color: var(--ag-danger); background: rgba(229,65,62,0.08); }
     .msglist { font-size: 12px; color: var(--ag-charcoal); border-left: 2px solid var(--ag-line); padding-left: 12px; margin: 0 0 12px; }
     .divider { height: 1px; background: var(--ag-line); margin: 14px 0; border: 0; }
     fieldset { border: 1px solid var(--ag-line); border-radius: 10px; padding: 12px 14px; margin: 0 0 12px; }
@@ -132,10 +150,25 @@
       {% if clients %}
       <div class="grid">
         {% for c in clients %}
-        <a class="card" href="/admin/atrium/{{ c.key }}">
-          <div class="name">{{ c.name|default(c.key, true) }}</div>
-          <div class="st">{{ 'Workspace ready' if c.has_workspace else 'No workspace yet' }}</div>
-        </a>
+        <div class="card">
+          <a class="card-main" href="/admin/atrium/{{ c.key }}">
+            <div class="name">{{ c.name|default(c.key, true) }}</div>
+            <div class="st">{{ 'Workspace ready' if c.has_workspace else 'No workspace yet' }}</div>
+          </a>
+          <div class="card-side">
+            <div class="card-logo">{{ c.logo|safe }}</div>
+            <form class="logo-up" method="post" action="/admin/atrium/{{ c.key }}/logo" enctype="multipart/form-data">
+              <label class="mini-btn">Logo
+                <input type="file" name="logo" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                       data-logo-input hidden>
+              </label>
+            </form>
+          </div>
+          <form class="card-del" method="post" action="/admin/atrium/{{ c.key }}/delete"
+                data-delete-client data-client-name="{{ c.name|default(c.key, true) }}">
+            <button type="submit" class="del-x" title="Delete client" aria-label="Delete client">&times;</button>
+          </form>
+        </div>
         {% endfor %}
       </div>
       {% else %}
@@ -144,16 +177,12 @@
 
       <h2 class="section">Add a new client</h2>
       <form class="panel" method="post" action="/admin/atrium/new">
-        <p class="meta">Creates the client, a portal login, and a <strong>blank Atrium workspace</strong>
-        to build from. The key is the short lowercase id used everywhere (e.g. <code>honeytribe</code>).
-        Tip: drop their logo at <code>assets/clients/&lt;key&gt;.svg</code> first, or rebrand later.</p>
-        <div class="row">
-          <div><label>Display name</label><input type="text" name="name" placeholder="Honey Tribe Resort" required></div>
-          <div><label>Client key (optional)</label><input type="text" name="key" placeholder="auto from name, e.g. honey-tribe-resort"></div>
-        </div>
-        <label>Portal password (optional, blank auto-generates a strong one)</label>
-        <input type="text" name="password" placeholder="auto-generated if left blank">
-        <button class="btn violet" type="submit">Create client &amp; blank workspace</button>
+        <p class="meta">Just enter a name. We create the client, a portal login (auto-generated
+        password &mdash; reveal it later on the client's page), and a <strong>blank Atrium workspace</strong>,
+        then drop you straight into it to build out.</p>
+        <label>Display name</label>
+        <input type="text" name="name" placeholder="Honey Tribe Resort" required>
+        <button class="btn violet" type="submit">Create client</button>
       </form>
 
     {% else %}
@@ -324,5 +353,28 @@
       {% endif %}
     {% endif %}
   </main>
+  <script>
+    // Wire the client-card controls (list mode). Kept DOM-driven + esprima-4.x-safe (no ?./??), and
+    // free of any Jinja so the pre-deploy JS gate can parse it: state comes from data- attributes.
+    (function () {
+      // "Upload logo": picking a file auto-submits its form, so the logo posts with one click.
+      var inputs = document.querySelectorAll("input[data-logo-input]");
+      for (var i = 0; i < inputs.length; i++) {
+        inputs[i].addEventListener("change", function () {
+          if (this.files && this.files.length && this.form) { this.form.submit(); }
+        });
+      }
+      // Delete: confirm with the client's name (read from a data attribute) before the POST fires.
+      var dels = document.querySelectorAll("form[data-delete-client]");
+      for (var j = 0; j < dels.length; j++) {
+        dels[j].addEventListener("submit", function (e) {
+          var name = this.getAttribute("data-client-name") || "this client";
+          var ok = window.confirm("Delete " + name + "?\n\nThis removes the client login and their "
+            + "entire workspace. This cannot be undone.");
+          if (!ok) { e.preventDefault(); }
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

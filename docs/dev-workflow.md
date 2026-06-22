@@ -50,28 +50,37 @@ On GitHub, open a PR from your branch into `main`. **CI runs automatically** (`.
 
 A red PR cannot merge. Fix it on the branch and push again.
 
-## 4. Integrate everyone's branches
+## 4. Integrate + ship — the agent-driven release SOP
 
-When several branches are ready, integrate them safely:
-
-```powershell
-.\tools\merge-branches.ps1
-```
-
-It fetches all per-machine branches, merges the clean ones onto a throwaway `integration/merge`
-branch, runs the CI tests locally, and **stops for a human on the first conflict or red test** — it
-never auto-pushes `main` and never deletes anything. If it stops on a conflict, **ask Claude to merge
-the conflicting branch** (it handles the semantic ones — e.g. two people who rebuilt the same screen).
-
-When it's clean and green, it prints the exact commands to land it:
+When branches are ready, **drop `tools/merge-branches.ps1` into Claude Code and ask it to merge +
+deploy.** Claude is the human-in-the-loop; the script does the deterministic work and runs the whole
+pipeline to live:
 
 ```powershell
-git switch main; git merge --ff-only integration/merge; git push origin main
-.\tools\merge-branches.ps1 -DeleteMerged    # prune the branches now contained in main
+.\tools\merge-branches.ps1            # integrate -> CI -> land on main -> deploy changed services -> prune
+.\tools\merge-branches.ps1 -DryRun    # preview the land+deploy plan, change nothing
 ```
 
-`-DeleteMerged` only deletes remote branches whose commits are already in `main`, so it can never
-drop unmerged work.
+In one run it: commits + pushes your local work to your dev branch, fetches every per-machine branch,
+merges the clean ones onto a throwaway `integration/merge`, runs the CI tests locally, **lands the
+result on `main`**, **auto-detects which services changed and deploys each** (it maps each changed path
+to its deploy script — portal → `deploy_dash_platform.ps1`, `clients/<c>/dash/` → that client's dash
+deploy, ingest/status likewise), then **prunes** the dev branches now contained in `main`.
+
+It **stops only where judgment is needed** — the first real merge conflict or a red CI test:
+
+- **Conflict** → it aborts that one merge (the clean ones stay on `integration/merge`) and hands off.
+  **Claude resolves it semantically** (preserving *both* devs' intent — e.g. two people who rebuilt the
+  same screen), commits, and re-runs the script.
+- **Red test** → Claude fixes the failure on the integrated tree, then re-runs. **Never** bypass CI.
+
+Opt-outs: `-NoPush` (integrate + test, then stop for review — prints the manual land/deploy commands),
+`-NoDeploy` (land but don't deploy), `-NoPrune` (skip cleanup), `-DeleteMerged` (standalone prune of
+branches already in `main` — can never drop unmerged work).
+
+> **Branch protection vs. direct land:** this flow pushes straight to `main`. If you enable GitHub
+> branch protection (step 5 below) it will block that — then run with `-NoPush` and merge via PR, or
+> leave protection off and rely on the local CI gate the script runs before landing.
 
 ## 5. Make CI required (one-time, GitHub UI)
 

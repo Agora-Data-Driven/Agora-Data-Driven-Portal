@@ -829,6 +829,9 @@ def atrium_creative(client, content_id):
 # reuses the same workspace.py mutators; all are gated super-admin via _atrium_admin_json_gate.
 ATRIUM_UPLOAD_MAX_BYTES = 8 * 1024 * 1024    # images: reject larger than 8 MB
 ATRIUM_VIDEO_MAX_BYTES = 30 * 1024 * 1024    # videos: kept under Cloud Run's ~32 MiB request cap
+# A client LOGO is inlined into the workspace JSON (brand.client_logo), which is rewritten in full on
+# every edit -- so keep it tiny. Seeded logos sit around ~70 KB; 512 KB is a generous ceiling.
+LOGO_MAX_BYTES = 512 * 1024
 _ATRIUM_IMAGE_EXT = {
     "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif",
     "image/webp": "webp", "image/svg+xml": "svg",
@@ -1436,6 +1439,11 @@ def _atrium_admin_redirect(client, msg):
     return redirect(url_for("admin_atrium_client", client=client, msg=msg))
 
 
+def _atrium_redirect_list(msg):
+    """Redirect back to the Workspaces LIST (the card grid) with a flash message."""
+    return redirect(url_for("admin_atrium", msg=msg))
+
+
 @app.route("/admin/atrium", methods=["GET"])
 def admin_atrium():
     """List the clients whose Atrium workspaces the operator can manage."""
@@ -1445,8 +1453,13 @@ def admin_atrium():
         return Response("Forbidden", status=403, mimetype="text/plain")
     clients = []
     for c in store.list_clients():
-        clients.append({"key": c.get("key"), "name": c.get("name"),
-                        "has_workspace": workspace.workspace_exists(c.get("key"))})
+        key, name = c.get("key"), c.get("name")
+        ws = workspace.load_workspace(key)
+        # Logo shown on the card: the client's own logo from its workspace, else an initials monogram
+        # (so a brand-new / unseeded client still renders something on-brand rather than an empty box).
+        logo = (ws.get("brand", {}).get("client_logo") if ws else None) or brand.monogram(name or key)
+        clients.append({"key": key, "name": name,
+                        "has_workspace": ws is not None, "logo": logo})
     return render_template("admin_atrium.html", clients=clients, client=None,
                            user=current_user(), workspace_name=WORKSPACE_NAME,
                            msg=request.args.get("msg"), **_brand_ctx())
@@ -1471,26 +1484,76 @@ def _slugify_key(name):
 
 @app.route("/admin/atrium/new", methods=["POST"])
 def admin_atrium_new():
-    """Onboard a brand-new client: registry entry + portal password + a BLANK Atrium workspace.
+    """Onboard a brand-new client from JUST a display name, then land on their blank workspace.
 
-    Reuses onboard_client (the same starter_workspace the CLI uses) so the new client opens to a
-    tidy, empty workspace the team then builds out via the console + in-workspace admin editing.
+    The key auto-derives from the name and a strong portal password is auto-generated, so the only
+    thing the team types is the name. Reuses onboard_client (the same starter_workspace the CLI uses)
+    so the new client opens to a tidy, empty workspace -- a blank version of /w/<key>/ with no
+    campaigns -- which the team then builds out in place. On success we redirect STRAIGHT to that
+    workspace (super-admin can_open is "*"), matching "click create -> the empty workspace loads".
     """
     if not is_superadmin():
         return Response("Forbidden", status=403, mimetype="text/plain")
     name = request.form.get("name", "").strip()
-    key = request.form.get("key", "").strip().lower() or _slugify_key(name)
+    # Key + password are no longer asked for: derive the key from the name, auto-generate the password.
+    key = (request.form.get("key", "").strip().lower() or _slugify_key(name))
     if not _valid_client_key(key):
         return redirect(url_for("admin_atrium",
-                                msg="Please enter a display name (the key auto-generates from it, or set "
-                                    "one using lowercase letters, numbers and hyphens)."))
+                                msg="Please enter a display name we can build a client key from "
+                                    "(letters and numbers)."))
     if workspace.workspace_exists(key) or store.get_client(key) is not None:
-        return _atrium_admin_redirect(key, "Client '%s' already exists -- opening it." % key)
+        return redirect(url_for("atrium", client=key))  # already exists -> just open it
     import onboard_client  # lazy: reuses brand_for() + starter_workspace()
-    pw = onboard_client.onboard(key, name or None, password=request.form.get("password", "").strip() or None)
-    return _atrium_admin_redirect(key,
-        "Client '%s' created with a blank workspace. Portal password: %s  (any email + this password "
-        "logs the client in). Build out their workspace below." % (key, pw))
+    onboard_client.onboard(key, name or None)
+    return redirect(url_for("atrium", client=key))
+
+
+@app.route("/admin/atrium/<client>/logo", methods=["POST"])
+def admin_atrium_logo(client):
+    """Set a client's logo from an uploaded image (PNG/JPG/GIF/WEBP/SVG), shown on the workspace card
+    and in their workspace header. Stored INLINE in the workspace brand (brand.client_logo) as a
+    self-contained <img> data: URI -- exactly how seeded logos are embedded, so it needs no new infra
+    and no separate object. We cap the upload small (logos are tiny) since the workspace JSON is
+    rewritten in full on every edit."""
+    if not is_superadmin():
+        return Response("Forbidden", status=403, mimetype="text/plain")
+    if store.get_client(client) is None:
+        return _atrium_redirect_list("Unknown client '%s'." % client)
+    upload = request.files.get("logo")
+    if upload is None or not upload.filename:
+        return _atrium_redirect_list("No logo file chosen.")
+    mime = (upload.mimetype or "").lower()
+    if mime not in _ATRIUM_IMAGE_EXT:
+        return _atrium_redirect_list("Logo must be a PNG, JPG, GIF, WEBP or SVG image.")
+    data = upload.read(LOGO_MAX_BYTES + 1)
+    if len(data) > LOGO_MAX_BYTES:
+        return _atrium_redirect_list("Logo is too large -- please use an image under %d KB."
+                                     % (LOGO_MAX_BYTES // 1024))
+    # Embed as a data: URI inside an <img> (NOT inlined SVG markup): an <img> never executes script,
+    # so an uploaded SVG cannot inject anything when the markup is later rendered with |safe.
+    import base64  # lazy: only the logo path needs it
+    b64 = base64.b64encode(data).decode("ascii")
+    logo_markup = '<img src="data:%s;base64,%s" alt="logo">' % (mime, b64)
+    try:
+        workspace.set_client_logo(client, logo_markup)
+    except KeyError:
+        return _atrium_redirect_list("'%s' has no workspace yet -- create one before adding a logo."
+                                     % client)
+    return _atrium_redirect_list("Logo updated for '%s'." % client)
+
+
+@app.route("/admin/atrium/<client>/delete", methods=["POST"])
+def admin_atrium_delete(client):
+    """Delete a client: remove its registry entry (login + listing) AND its Atrium workspace object.
+
+    Destructive and irreversible; gated super-admin and confirmed in the UI before the POST fires."""
+    if not is_superadmin():
+        return Response("Forbidden", status=403, mimetype="text/plain")
+    removed = store.remove_client(client)
+    workspace.delete_workspace(client)
+    if not removed:
+        return _atrium_redirect_list("No client '%s' to delete." % client)
+    return _atrium_redirect_list("Deleted client '%s' (login and workspace removed)." % client)
 
 
 @app.route("/admin/atrium/<client>", methods=["GET"])
