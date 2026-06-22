@@ -190,7 +190,7 @@ _ACTION_KW = (
 )
 
 _MAX_BULLETS = 6          # per column
-_MAX_BULLET_CHARS = 240   # trim each bullet to keep the card readable
+_MAX_BULLET_CHARS = 400   # trim only very long bullets; keep complete detail per point
 
 
 def _is_heading(line):

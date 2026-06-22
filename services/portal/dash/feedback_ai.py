@@ -124,7 +124,8 @@ def _parse_sections_json(raw):
 def summarize_strategy_sections(doc_text):
     """Turn a strategy doc into a campaign's two client-facing sections. Returns a dict, or None.
 
-    The dict has keys "what" and "why" -- short bullet lists (newline-separated, one bullet per line)
+    The dict has keys "what" and "why" -- bullet lists (newline-separated, one bullet per line) where
+    each bullet is a precise, complete point carrying the document's concrete supporting detail --
     that populate a campaign's "Insight / Action" strategy card (the keys keep their original names
     for backward compatibility, but map positionally to Insight / Action). Used by Agora Atrium's
     "generate strategy from doc" action (atrium_docs.generate_strategy). No-op (returns None) unless
@@ -137,22 +138,29 @@ def summarize_strategy_sections(doc_text):
     try:
         response = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=900,
+            max_tokens=1800,
             system=(
                 "You write the AGORA marketing team's client-facing campaign strategy from an "
                 "internal strategy document. Read the WHOLE document, then produce exactly two "
-                "sections, each a tight bullet list (3 to 5 bullets, ONE bullet per line, each bullet "
-                "a single complete plain-English sentence). Rules for every bullet:\n"
-                "  - Be specific and concrete: name the actual audience, goal, channel, format, or "
-                "angle from the doc -- never a vague generality.\n"
+                "sections, each a bullet list (4 to 6 bullets, ONE bullet per line). Each bullet must "
+                "be PRECISE and COMPLETE -- a fully detailed point, not a terse headline. Rules for "
+                "every bullet:\n"
+                "  - Be precise and concrete: name the actual audience, goal, channel, format, or "
+                "angle from the doc, and carry over the SPECIFIC supporting detail that makes the "
+                "point land -- the real numbers, percentages, budgets, dates, platforms, KPIs, or "
+                "named tactics from the document. Never a vague generality.\n"
+                "  - Be complete: write a full, self-standing point (one or two sentences) that a "
+                "client can understand on its own without the doc. Do not clip or summarise away the "
+                "detail -- include the 'how' and the 'how much', not just the headline.\n"
                 "  - Be self-contained: do NOT carry over the document's title, section numbering, or "
                 "headings (e.g. '1. Client Context'); rewrite the substance in plain words.\n"
-                "  - No jargon, no preamble, no markdown bullet characters -- just the sentence.\n"
+                "  - No jargon, no preamble, no markdown bullet characters -- just the point text.\n"
                 "The two sections:\n"
                 "  what -- the Insight: WHY this campaign matters -- the audience need, market gap, or "
-                "data point that makes it worth doing.\n"
+                "data point that makes it worth doing, with the concrete evidence behind it.\n"
                 "  why  -- the Action: WHAT we are doing about it -- the concrete approach, content "
-                "angles, and formats we will run to act on that insight.\n"
+                "angles, formats, channels, and cadence we will run to act on that insight, each with "
+                "its specifics.\n"
                 "Cover the document completely; do not stop early or leave a section thin. Respond "
                 "with ONLY a JSON object of the form "
                 '{\"what\": \"...\", \"why\": \"...\"} where each value is its bullets separated by '
