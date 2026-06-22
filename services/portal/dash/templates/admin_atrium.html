@@ -42,6 +42,12 @@
     .pill.logout:hover { border-color: rgba(229,65,62,0.4); }
     main { max-width: 1000px; margin: 0 auto; padding: 28px; }
     a { color: var(--ag-purple-d); }
+    /* Welcome banner: makes it unmistakable this page IS the team admin portal. */
+    .welcome { background: linear-gradient(120deg, #fff 0%, #F6FBF5 58%, #F3F1FE 100%);
+      border: 1px solid var(--ag-line); border-radius: 18px; padding: 26px 28px; margin: 6px 0 8px;
+      box-shadow: var(--ag-shadow); }
+    .welcome h1 { margin: 0 0 8px; font-size: 24px; font-weight: 900; letter-spacing: -0.3px; }
+    .welcome p { margin: 0; color: var(--ag-muted); font-size: 14px; max-width: 640px; line-height: 1.5; }
     h2.section { font-size: 12px; color: var(--ag-muted); text-transform: uppercase; letter-spacing: 0.9px;
       font-weight: 700; margin: 28px 0 14px; }
     .panel { background: var(--ag-white); border: 1px solid var(--ag-line); border-radius: 14px; padding: 18px;
@@ -135,8 +141,6 @@
     <div class="brand">{{ agora_logo|safe }}<span class="brand-sub">{{ workspace_name }} &middot; Team</span></div>
     <nav class="nav">
       {% if user %}<span class="who">{{ user }}</span>{% endif %}
-      <a class="pill" href="/">Portal</a>
-      <a class="pill" href="/admin">Admin</a>
       <a class="pill logout" href="/logout">Log out</a>
     </nav>
   </header>
@@ -144,213 +148,53 @@
   <main>
     {% if msg %}<div class="flash">{{ msg }}</div>{% endif %}
 
-    {% if clients is not none %}
-      <!-- ===== List mode: pick a client to manage ===== -->
-      <h2 class="section">Manage a client workspace</h2>
-      {% if clients %}
-      <div class="grid">
-        {% for c in clients %}
-        <div class="card">
-          <a class="card-main" href="/admin/atrium/{{ c.key }}">
-            <div class="name">{{ c.name|default(c.key, true) }}</div>
-            <div class="st">{{ 'Workspace ready' if c.has_workspace else 'No workspace yet' }}</div>
-          </a>
-          <div class="card-side">
-            <div class="card-logo">{{ c.logo|safe }}</div>
-            <form class="logo-up" method="post" action="/admin/atrium/{{ c.key }}/logo" enctype="multipart/form-data">
-              <label class="mini-btn">Logo
-                <input type="file" name="logo" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
-                       data-logo-input hidden>
-              </label>
-            </form>
-          </div>
-          <form class="card-del" method="post" action="/admin/atrium/{{ c.key }}/delete"
-                data-delete-client data-client-name="{{ c.name|default(c.key, true) }}">
-            <button type="submit" class="del-x" title="Delete client" aria-label="Delete client">&times;</button>
+    <!-- Welcome banner: makes it unmistakable this page IS the team admin portal. -->
+    <section class="welcome">
+      <h1>Welcome to the Admin Portal</h1>
+      <p>Your home base for every Agora client. Click a client to open their workspace and edit it
+         in place, or add a new one below &mdash; we'll create the login and a blank workspace and drop
+         you straight into it.</p>
+    </section>
+
+    <!-- Pick a client to open their workspace. A card links straight to /w/<key>/. -->
+    <h2 class="section">Client workspaces</h2>
+    {% if clients %}
+    <div class="grid">
+      {% for c in clients %}
+      <div class="card">
+        <a class="card-main" href="/w/{{ c.key }}/">
+          <div class="name">{{ c.name|default(c.key, true) }}</div>
+          <div class="st">{{ 'Open workspace →' if c.has_workspace else 'No workspace yet' }}</div>
+        </a>
+        <div class="card-side">
+          <div class="card-logo">{{ c.logo|safe }}</div>
+          <form class="logo-up" method="post" action="/admin/atrium/{{ c.key }}/logo" enctype="multipart/form-data">
+            <label class="mini-btn">Logo
+              <input type="file" name="logo" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                     data-logo-input hidden>
+            </label>
           </form>
         </div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="panel">No clients yet. Create your first one below.</div>
-      {% endif %}
-
-      <h2 class="section">Add a new client</h2>
-      <form class="panel" method="post" action="/admin/atrium/new">
-        <p class="meta">Just enter a name. We create the client, a portal login (auto-generated
-        password &mdash; reveal it later on the client's page), and a <strong>blank Atrium workspace</strong>,
-        then drop you straight into it to build out.</p>
-        <label>Display name</label>
-        <input type="text" name="name" placeholder="Honey Tribe Resort" required>
-        <button class="btn violet" type="submit">Create client</button>
-      </form>
-
-    {% else %}
-      <!-- ===== Manage mode: one client ===== -->
-      <h2 class="section" style="margin-top:8px">
-        Managing <strong style="color:var(--ag-ink)">{{ ws.display_name if ws else client }}</strong>
-        &nbsp;·&nbsp; <a href="/admin/atrium">All clients</a>
-        &nbsp;·&nbsp; <a href="/w/{{ client }}/" target="_blank">Open workspace ↗</a>
-      </h2>
-
-      <!-- Client login (portal password): folded in from the old Super admin console -->
-      <h2 class="section">Client login</h2>
-      <form class="panel" method="post" action="/admin/atrium/{{ client }}/password">
-        <p class="meta">The client logs in with <strong>any email</strong> + this password (the email is only a label).</p>
-        <div class="row">
-          <div><label>Current password</label><input type="text" value="{{ revealed_pw|default('', true) }}" readonly placeholder="(none set yet)"></div>
-          <div><label>Set a new password</label><input type="text" name="password" placeholder="leave blank to auto-generate"></div>
-        </div>
-        <button class="btn violet" type="submit">Save password</button>
-      </form>
-
-      {% if not ws %}
-        <div class="panel">
-          <h3>No workspace yet</h3>
-          <p class="meta">This client has no <code>workspace/{{ client }}.json</code> object. Seed one
-          (e.g. run <code>seed_workspace.py</code> for the demo client) before managing it here.</p>
-        </div>
-      {% else %}
-
-        <!-- Headline metrics -->
-        <h2 class="section">Headline metrics</h2>
-        <form class="panel" method="post" action="/admin/atrium/{{ client }}/metrics">
-          <div class="row3">
-            <div><label>Leads today</label><input type="text" name="today_leads" value="{{ ws.today.leads }}"></div>
-            <div><label>Visitors today</label><input type="text" name="today_visitors" value="{{ ws.today.visitors }}"></div>
-            <div><label>Bookings today</label><input type="text" name="today_bookings" value="{{ ws.today.bookings }}"></div>
-          </div>
-          <div class="row">
-            <div><label>Leads from paid</label><input type="text" name="split_paid" value="{{ ws.split.paid }}"></div>
-            <div><label>Leads from organic</label><input type="text" name="split_organic" value="{{ ws.split.organic }}"></div>
-          </div>
-          <hr class="divider">
-          {% for m in ws.metrics %}
-          <fieldset>
-            <legend>{{ m.label }}</legend>
-            <div class="row3">
-              <div><label>Value</label><input type="text" name="metric_value_{{ loop.index0 }}" value="{{ m.value }}"></div>
-              <div><label>Trend</label><input type="text" name="metric_trend_{{ loop.index0 }}" value="{{ m.trend }}"></div>
-              <div><span class="chk"><input type="checkbox" name="metric_up_{{ loop.index0 }}" value="1" {{ 'checked' if m.trend_up else '' }}> Good change (green)</span></div>
-            </div>
-          </fieldset>
-          {% endfor %}
-          <button class="btn" type="submit">Save metrics</button>
+        <form class="card-del" method="post" action="/admin/atrium/{{ c.key }}/delete"
+              data-delete-client data-client-name="{{ c.name|default(c.key, true) }}">
+          <button type="submit" class="del-x" title="Delete client" aria-label="Delete client">&times;</button>
         </form>
-
-        <!-- Content calendar (read-only mirror of the client's; edit dates via the workspace itself) -->
-        {% if calendars %}
-        <h2 class="section">Content calendar</h2>
-        <div class="cal-legend">
-          <span><span class="dot" style="background:#98a0b0"></span>Milestone</span>
-          <span><span class="dot" style="background:#9484FB"></span>Paid</span>
-          <span><span class="dot" style="background:#4FAB4A"></span>Organic</span>
-          <span><span class="dot" style="background:#F2820C"></span>Due</span>
-          <span style="color:var(--ag-green-d);font-weight:700">&#10003; done / ahead</span>
-        </div>
-        <div class="cal-stack">
-          {% for cal in calendars %}
-          <div class="cal-month {{ 'is-current' if cal.is_current else 'is-side' }}">
-            <div class="cal-mhead"><span class="cal-mname">{{ cal.label }}</span>{% if cal.is_current %}<span class="cal-now">This month</span>{% endif %}</div>
-            <div class="cal-grid">
-              {% for d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] %}<div class="cal-dow">{{ d }}</div>{% endfor %}
-              {% for week in cal.weeks %}{% for cell in week %}
-              {% set cep = cell.is_past and cell.in_month and not cell.events and not cell.done and not cell.ahead and not cell.is_today %}
-              <div class="cal-cell {{ 'out' if not cell.in_month else '' }} {{ 'past' if cell.is_past else '' }} {{ 'pastempty' if cep else '' }} {{ 'done' if cell.done else '' }} {{ 'ahead' if cell.ahead else '' }} {{ 'today' if cell.is_today else '' }}">
-                <div class="cal-day">{{ cell.day }}{% if cell.done %} <span class="cal-check">&#10003;</span>{% endif %}</div>
-                {% for ev in cell.events %}<div class="cal-ev"><span class="evd {{ ev.kind }}"></span><span>{{ ev.label }}</span></div>{% endfor %}
-              </div>
-              {% endfor %}{% endfor %}
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-        {% endif %}
-
-        <!-- Campaigns + content -->
-        <h2 class="section">Campaigns &amp; content</h2>
-        {% for c in ws.campaigns %}
-        <div class="panel">
-          <h3><span class="tag {{ c.channel }}">{{ 'Paid' if c.channel=='paid' else 'Organic' }}</span> &nbsp;{{ c.name }}</h3>
-          <p class="meta">{{ c.eyebrow }} &middot; {{ c.content|length }} content piece(s)</p>
-
-          <form method="post" action="/admin/atrium/{{ client }}/campaign">
-            <input type="hidden" name="campaign_id" value="{{ c.id }}">
-            <label>Insight (why this campaign — one bullet per line)</label><textarea name="what">{{ c.strategy.what }}</textarea>
-            <label>Action (our solution — one bullet per line)</label><textarea name="why">{{ c.strategy.why }}</textarea>
-            <label>AI summary</label><textarea name="ai_summary">{{ c.ai_summary }}</textarea>
-            <button class="btn" type="submit">Save strategy &amp; summary</button>
-          </form>
-
-          <hr class="divider">
-          <form method="post" action="/admin/atrium/{{ client }}/content">
-            <input type="hidden" name="campaign_id" value="{{ c.id }}">
-            <p class="meta">Add a content piece (it starts as <strong>awaiting</strong> and notifies the client):</p>
-            <div class="row">
-              <div><label>Reference (e.g. RVR-018)</label><input type="text" name="ref" placeholder="RVR-018"></div>
-              <div><label>Type</label><input type="text" name="type_tag" placeholder="Static Post"></div>
-            </div>
-            <div class="row">
-              <div><label>Sub-tag</label><input type="text" name="sub_tag" placeholder="Lead Gen"></div>
-              <div><label>Platform</label><input type="text" name="platform" placeholder="Instagram · Facebook"></div>
-            </div>
-            <label>Caption</label><textarea name="caption" placeholder="The caption the client will review…"></textarea>
-            <button class="btn green" type="submit">Add content &amp; notify client</button>
-          </form>
-        </div>
-        {% endfor %}
-
-        <div class="panel">
-          <h3>Add a campaign</h3>
-          <form method="post" action="/admin/atrium/{{ client }}/campaign">
-            <div class="row">
-              <div><label>Channel</label><select name="channel"><option value="paid">Paid / Lead Gen</option><option value="organic">Organic</option></select></div>
-              <div><label>Name</label><input type="text" name="name" placeholder="Autumn Retargeting"></div>
-            </div>
-            <label>Eyebrow</label><input type="text" name="eyebrow" placeholder="PAID ADS · RETARGETING">
-            <label>What we did</label><textarea name="what"></textarea>
-            <label>Why (the data)</label><textarea name="why"></textarea>
-            <label>What's next</label><textarea name="next"></textarea>
-            <label>AI summary</label><textarea name="ai_summary"></textarea>
-            <button class="btn violet" type="submit">Add campaign</button>
-          </form>
-        </div>
-
-        <!-- Conversations -->
-        <h2 class="section">Conversations</h2>
-        {% for cv in ws.conversations %}
-        <div class="panel">
-          <h3>{{ cv.subject }} &nbsp;<span class="tag {{ 'organic' if cv.status=='resolved' else 'paid' }}">{{ 'Resolved' if cv.status=='resolved' else 'Awaiting reply' }}</span></h3>
-          <div class="msglist">
-            {% for m in cv.messages %}<div><strong>{{ m.sender_name }}{% if m.sender=='agora' %} (AGORA){% endif %}:</strong> {{ m.body }}</div>{% endfor %}
-          </div>
-          <form method="post" action="/admin/atrium/{{ client }}/reply">
-            <input type="hidden" name="conversation_id" value="{{ cv.id }}">
-            <div class="row">
-              <div><label>Reply as</label><input type="text" name="sender_name" value="Maya"></div>
-              <div><span class="chk"><input type="checkbox" name="resolve" value="1"> Mark resolved</span></div>
-            </div>
-            <label>Message</label><textarea name="body" placeholder="Your reply…"></textarea>
-            <button class="btn green" type="submit">Send reply &amp; notify client</button>
-          </form>
-        </div>
-        {% endfor %}
-
-        <div class="panel">
-          <h3>Start a conversation</h3>
-          <form method="post" action="/admin/atrium/{{ client }}/conversation">
-            <label>Subject</label><input type="text" name="subject" placeholder="July creative direction">
-            <div class="row">
-              <div><label>Open as</label><input type="text" name="sender_name" value="Maya"></div>
-              <div></div>
-            </div>
-            <label>Opening message (optional)</label><textarea name="body"></textarea>
-            <button class="btn violet" type="submit">Start conversation</button>
-          </form>
-        </div>
-
-      {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="panel">No clients yet. Create your first one below.</div>
     {% endif %}
+
+    <h2 class="section">Add a new client</h2>
+    <form class="panel" method="post" action="/admin/atrium/new">
+      <p class="meta">Just enter a name. We create the client, a portal login (auto-generated
+      password), and a <strong>blank Atrium workspace</strong>, then drop you straight into it to
+      build out.</p>
+      <label>Display name</label>
+      <input type="text" name="name" placeholder="Honey Tribe Resort" required>
+      <button class="btn violet" type="submit">Create client</button>
+    </form>
   </main>
   <script>
     // Wire the client-card controls (list mode). Kept DOM-driven + esprima-4.x-safe (no ?./??), and

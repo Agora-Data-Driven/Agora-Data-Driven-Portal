@@ -121,8 +121,9 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
   `data-admin="1"`), posting JSON to `/w/<c>/admin/*`: `strategy`, `strategy-doc`, `generate-summary`,
   `summary`, `campaign`, `delete-campaign`, `content`, `edit-content`, `delete-content`,
   `content-comment`, `add-images`, `remove-image`, `upload-creative`, `creative-upload-url`,
-  `creative-confirm`, `remove-creative`, `metrics`, `calendar`, `reply`. The older
-  dark `/admin/atrium/...` console stays as a fallback. **Clients** approve in place (`/approve`) and
+  `creative-confirm`, `remove-creative`, `metrics`, `calendar`, `reply`. This in-place surface is the
+  ONLY editing path — the old per-client `/admin/atrium/<c>` console page (and its
+  password/campaign/content/conversation/reply/metrics POSTs) has been removed. **Clients** approve in place (`/approve`) and
   post threaded `/w/<c>/comment`s; "Request changes" now lives IN the comment thread as a
   `kind:"changes"` comment (light-red, flagged) that flips status to `changes` and exposes a
   **Resolve** button (`/resolve-comment`) — resolving the last open one returns the piece to
@@ -130,16 +131,18 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
 - **Routes (all behind existing session auth):** client `GET /w/<c>/` + `/w/<c>/<tab>` (overview,
   dashboard, leadgen, organic, calendar, conversations, settings) gated `authed()`+`can_open(<c>)`;
   client POSTs `/w/<c>/{approve,request-changes,save-note,comment,resolve-comment,send-message,save-notify}` +
-  creative GET above; admin POSTs `/w/<c>/admin/*` gated `is_superadmin()`. Team console
-  `/admin/atrium[/<c>][/campaign|content|conversation|reply|metrics|logo|delete]` gated
-  `is_superadmin()`. The console **landing** (`/admin/atrium`) is one card per client showing the
-  client's logo on the right with an **Upload logo** control (POST `/admin/atrium/<c>/logo` — embeds
-  the image inline as a `brand.client_logo` `<img>` data-URI, ≤512 KB; same posture as seeded logos)
-  and a confirmed **Delete** control (POST `/admin/atrium/<c>/delete` — `store.remove_client` +
-  `workspace.delete_workspace`). **Add a new client** asks ONLY for a display name (key auto-derives,
-  password auto-generates) and on success redirects STRAIGHT to the new client's blank `/w/<c>/`.
-  The portal landing shows **Open dashboard** per client; the workspace `/w/<c>/` stays reachable
-  directly and from the admin console.
+  creative GET above; admin POSTs `/w/<c>/admin/*` gated `is_superadmin()`. The team console is the
+  **landing page only** (`GET /admin/atrium`, gated `is_superadmin()`): a welcome banner + one card
+  per client (the worked-example `template` client is filtered out). **Clicking a card opens that
+  client's workspace `/w/<c>/` directly** (where all editing happens in place). Each card also carries
+  an **Upload logo** control (POST `/admin/atrium/<c>/logo` — embeds the image inline as a
+  `brand.client_logo` `<img>` data-URI, ≤512 KB; same posture as seeded logos) and a confirmed
+  **Delete** control (POST `/admin/atrium/<c>/delete` — `store.remove_client` +
+  `workspace.delete_workspace`). **Add a new client** (`POST /admin/atrium/new`) asks ONLY for a
+  display name (key auto-derives, password auto-generates) and on success redirects STRAIGHT to the
+  new client's blank `/w/<c>/`. The console nav is just **Log out** (no Portal/Admin links). The
+  portal landing (`/`) shows **Open dashboard** per client; the workspace `/w/<c>/` stays reachable
+  directly and from the console.
 - **Strategy doc → AI strategy (optional, opt-in):** an admin attaches a Google Doc to a campaign and
   clicks "Generate strategy". `dash/atrium_docs.py` reads it (public-export fetch by default, or the
   **Google Drive API** when `ATRIUM_DOCS_ENABLED=1`) and `feedback_ai.summarize_strategy_sections`

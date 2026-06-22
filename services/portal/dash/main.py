@@ -1433,11 +1433,9 @@ def atrium_admin_reply_inline(client):
 
 
 # --- Atrium team management (super-admin operator console) --------------------------------------
-def _atrium_admin_redirect(client, msg):
-    """Redirect back to a client's Atrium management page with a flash message."""
-    return redirect(url_for("admin_atrium_client", client=client, msg=msg))
-
-
+# The console is the LANDING PAGE only: a card grid to open / add / delete clients. There is no
+# per-client management page anymore -- the team edits each workspace IN PLACE via /w/<c>/admin/*
+# (see the in-workspace admin editing section above), and a card opens that workspace directly.
 def _atrium_redirect_list(msg):
     """Redirect back to the Workspaces LIST (the card grid) with a flash message."""
     return redirect(url_for("admin_atrium", msg=msg))
@@ -1453,13 +1451,15 @@ def admin_atrium():
     clients = []
     for c in store.list_clients():
         key, name = c.get("key"), c.get("name")
+        if key == "template":
+            continue  # the worked-example pattern, not a real client -- never list it in the console
         ws = workspace.load_workspace(key)
         # Logo shown on the card: the client's own logo from its workspace, else an initials monogram
         # (so a brand-new / unseeded client still renders something on-brand rather than an empty box).
         logo = (ws.get("brand", {}).get("client_logo") if ws else None) or brand.monogram(name or key)
         clients.append({"key": key, "name": name,
                         "has_workspace": ws is not None, "logo": logo})
-    return render_template("admin_atrium.html", clients=clients, client=None,
+    return render_template("admin_atrium.html", clients=clients,
                            user=current_user(), workspace_name=WORKSPACE_NAME,
                            msg=request.args.get("msg"), **_brand_ctx())
 
@@ -1553,172 +1553,6 @@ def admin_atrium_delete(client):
     if not removed:
         return _atrium_redirect_list("No client '%s' to delete." % client)
     return _atrium_redirect_list("Deleted client '%s' (login and workspace removed)." % client)
-
-
-@app.route("/admin/atrium/<client>", methods=["GET"])
-def admin_atrium_client(client):
-    """Manage one client's Atrium workspace: campaigns, content, conversations, metrics."""
-    if not authed():
-        return redirect(url_for("login", next=request.full_path))
-    if not is_superadmin():
-        return Response("Forbidden", status=403, mimetype="text/plain")
-    ws = workspace.load_workspace(client)
-    # The team console mirrors the client's content calendar: a prev/current/next month window,
-    # anchored on today's SGT business day (atrium_view owns both helpers, so it stays consistent).
-    calendars = None
-    if ws:
-        today = atrium_view.business_today()
-        calendars = atrium_view.calendar_months(ws.get("calendar", []), today)
-    return render_template("admin_atrium.html", clients=None, client=client, ws=ws,
-                           calendars=calendars, revealed_pw=store.reveal_password(client),
-                           user=current_user(), workspace_name=WORKSPACE_NAME,
-                           msg=request.args.get("msg"), **_brand_ctx())
-
-
-@app.route("/admin/atrium/<client>/password", methods=["POST"])
-def admin_atrium_password(client):
-    """Set the client's PORTAL login password from the Workspaces console -- folds in the old
-    super-admin helpdesk (any email + this password logs the client in; the email is just a label)."""
-    if not is_superadmin():
-        return Response("Forbidden", status=403, mimetype="text/plain")
-    if store.get_client(client) is None:
-        return _atrium_admin_redirect(client, "Unknown client '%s'." % client)
-    pw = request.form.get("password", "").strip()
-    if not pw:
-        import secrets  # lazy: only when auto-generating
-        pw = secrets.token_urlsafe(9)
-    store.set_client_password(client, pw)
-    return _atrium_admin_redirect(client, "Portal password for '%s' set to: %s" % (client, pw))
-
-
-@app.route("/admin/atrium/<client>/campaign", methods=["POST"])
-def admin_atrium_campaign(client):
-    """Add a new campaign or edit an existing one's strategy + AI summary."""
-    if not is_superadmin():
-        return Response("Forbidden", status=403, mimetype="text/plain")
-    campaign_id = request.form.get("campaign_id", "").strip()
-    strategy = {
-        "what": request.form.get("what", "").strip(),
-        "why": request.form.get("why", "").strip(),
-    }
-    ai_summary = request.form.get("ai_summary", "").strip()
-    if campaign_id:
-        try:
-            workspace.update_campaign(client, campaign_id, strategy=strategy, ai_summary=ai_summary)
-            return _atrium_admin_redirect(client, "Campaign updated.")
-        except KeyError:
-            return _atrium_admin_redirect(client, "Unknown campaign.")
-    channel = "paid" if request.form.get("channel") == "paid" else "organic"
-    name = request.form.get("name", "").strip()
-    if not name:
-        return _atrium_admin_redirect(client, "Campaign name is required.")
-    workspace.add_campaign(client, channel, name, request.form.get("eyebrow", "").strip(),
-                           strategy=strategy, ai_summary=ai_summary)
-    return _atrium_admin_redirect(client, "Campaign added.")
-
-
-@app.route("/admin/atrium/<client>/content", methods=["POST"])
-def admin_atrium_content(client):
-    """Add a content piece to a campaign (status -> awaiting) and notify the client per prefs."""
-    if not is_superadmin():
-        return Response("Forbidden", status=403, mimetype="text/plain")
-    campaign_id = request.form.get("campaign_id", "").strip()
-    content = {
-        "ref": request.form.get("ref", "").strip(),
-        "type_tag": request.form.get("type_tag", "").strip(),
-        "sub_tag": request.form.get("sub_tag", "").strip(),
-        "platform": request.form.get("platform", "").strip(),
-        "caption": request.form.get("caption", "").strip(),
-        "thumb_kind": request.form.get("thumb_kind", "").strip(),
-    }
-    if content["ref"]:
-        content["id"] = content["ref"]
-    try:
-        item = workspace.add_content(client, campaign_id, content)
-    except KeyError:
-        return _atrium_admin_redirect(client, "Unknown campaign.")
-    ws = workspace.load_workspace(client)
-    notify.team_added_content(client, ws, item)
-    return _atrium_admin_redirect(client, "Content added and the client was notified.")
-
-
-@app.route("/admin/atrium/<client>/conversation", methods=["POST"])
-def admin_atrium_conversation(client):
-    """Start a new conversation thread, optionally with an opening AGORA message."""
-    if not is_superadmin():
-        return Response("Forbidden", status=403, mimetype="text/plain")
-    subject = request.form.get("subject", "").strip()
-    if not subject:
-        return _atrium_admin_redirect(client, "Subject is required.")
-    conv = workspace.add_conversation(client, subject)
-    opening = request.form.get("body", "").strip()
-    if opening:
-        sender_name = request.form.get("sender_name", "").strip() or "Maya"
-        workspace.add_message(client, conv["id"], "agora", sender_name, opening)
-        ws = workspace.load_workspace(client)
-        notify.team_replied(client, ws, workspace._find_conversation(ws, conv["id"]), sender_name)
-    return _atrium_admin_redirect(client, "Conversation started.")
-
-
-@app.route("/admin/atrium/<client>/reply", methods=["POST"])
-def admin_atrium_reply(client):
-    """Reply to a conversation as the AGORA team; notifies the client per their prefs."""
-    if not is_superadmin():
-        return Response("Forbidden", status=403, mimetype="text/plain")
-    conv_id = request.form.get("conversation_id", "").strip()
-    body = request.form.get("body", "").strip()
-    if not body:
-        return _atrium_admin_redirect(client, "Message is empty.")
-    sender_name = request.form.get("sender_name", "").strip() or "Maya"
-    new_status = "resolved" if _bool_field("resolve") else "awaiting_reply"
-    try:
-        conv, _msg = workspace.add_message(client, conv_id, "agora", sender_name, body,
-                                           set_status=new_status)
-    except KeyError:
-        return _atrium_admin_redirect(client, "Unknown conversation.")
-    ws = workspace.load_workspace(client)
-    notify.team_replied(client, ws, conv, sender_name)
-    return _atrium_admin_redirect(client, "Reply sent and the client was notified.")
-
-
-@app.route("/admin/atrium/<client>/metrics", methods=["POST"])
-def admin_atrium_metrics(client):
-    """Update the headline counts (today + split) and the six KPI metric values/trends."""
-    if not is_superadmin():
-        return Response("Forbidden", status=403, mimetype="text/plain")
-    ws = workspace.load_workspace(client)
-    if ws is None:
-        return _atrium_admin_redirect(client, "No workspace to edit.")
-
-    def _int(name, fallback):
-        try:
-            return int(request.form.get(name, fallback))
-        except (TypeError, ValueError):
-            return fallback
-
-    today = {
-        "leads": _int("today_leads", ws.get("today", {}).get("leads", 0)),
-        "visitors": _int("today_visitors", ws.get("today", {}).get("visitors", 0)),
-        "bookings": _int("today_bookings", ws.get("today", {}).get("bookings", 0)),
-    }
-    split = {
-        "paid": _int("split_paid", ws.get("split", {}).get("paid", 0)),
-        "organic": _int("split_organic", ws.get("split", {}).get("organic", 0)),
-    }
-    workspace.set_overview_counts(client, today=today, split=split)
-
-    metrics = []
-    for i, m in enumerate(ws.get("metrics", [])):
-        metrics.append({
-            "icon": m.get("icon", "trending"),
-            "label": m.get("label", ""),
-            "value": request.form.get("metric_value_%d" % i, m.get("value", "")).strip(),
-            "trend": request.form.get("metric_trend_%d" % i, m.get("trend", "")).strip(),
-            "trend_up": _bool_field("metric_up_%d" % i),
-        })
-    if metrics:
-        workspace.set_metrics(client, metrics)
-    return _atrium_admin_redirect(client, "Metrics updated.")
 
 
 @app.route("/healthz", methods=["GET"])

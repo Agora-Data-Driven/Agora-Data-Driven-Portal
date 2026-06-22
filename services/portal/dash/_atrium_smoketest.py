@@ -42,6 +42,7 @@ os.environ["REGISTRY_LOCAL_DIR"] = _TMP   # admin_atrium console reads the regis
 os.environ["SESSION_SECRET"] = "test-secret"
 
 import seed_workspace   # noqa: E402
+import store            # noqa: E402
 import workspace        # noqa: E402
 import main             # noqa: E402
 
@@ -120,53 +121,24 @@ def run():
     prefs = workspace.get_notify(workspace.load_workspace(CLIENT), SUPER["user"])
     _check("notify persisted", prefs["content"] is False and prefs["frequency"] == "daily")
 
-    # Team management: manage page renders, add content + reply persist.
-    _check("admin manage page renders",
-           "Managing" in c.get("/admin/atrium/%s" % CLIENT).get_data(as_text=True))
-    r = c.post("/admin/atrium/%s/content" % CLIENT,
-               data={"campaign_id": "c_paid_1", "ref": "RVR-018", "type_tag": "Static Post",
-                     "platform": "Instagram", "caption": "A brand new ad for review."})
-    _check("admin add-content redirects", r.status_code == 302)
-    _camp, new_item = workspace._find_content(workspace.load_workspace(CLIENT), "RVR-018")
-    _check("added content is awaiting", new_item is not None and new_item["status"] == "awaiting")
-    _check("client saw activity for new content",
-           any("RVR-018" in a["text"] for a in workspace.load_workspace(CLIENT)["activity"]))
-    r = c.post("/admin/atrium/%s/reply" % CLIENT,
-               data={"conversation_id": "cv_1", "sender_name": "Maya", "body": "On it!", "resolve": "1"})
-    _check("admin reply redirects", r.status_code == 302)
-    conv = workspace._find_conversation(workspace.load_workspace(CLIENT), "cv_1")
-    _check("reply persisted + resolved", conv["messages"][-1]["body"] == "On it!" and conv["status"] == "resolved")
+    # Team console is now the LANDING ONLY. The per-client manage page and its POST routes are GONE:
+    # the team edits each workspace IN PLACE via /w/<c>/admin/* (exercised below), and a console card
+    # opens /w/<c>/ directly.
+    _check("old per-client manage page removed (404)",
+           c.get("/admin/atrium/%s" % CLIENT).status_code == 404)
+    for path in ("password", "campaign", "content", "conversation", "reply", "metrics"):
+        _check("old console POST /%s removed" % path,
+               c.post("/admin/atrium/%s/%s" % (CLIENT, path), data={}).status_code in (404, 405))
 
-    # Admin: add a campaign, edit its strategy, start a conversation, edit metrics.
-    before_n = len(workspace.load_workspace(CLIENT)["campaigns"])
-    r = c.post("/admin/atrium/%s/campaign" % CLIENT,
-               data={"channel": "paid", "name": "Autumn Retargeting", "eyebrow": "PAID · RETARGETING",
-                     "what": "w", "why": "y", "next": "n", "ai_summary": "s"})
-    _check("admin add-campaign redirects", r.status_code == 302)
-    camps = workspace.load_workspace(CLIENT)["campaigns"]
-    _check("campaign added", len(camps) == before_n + 1)
-    new_id = camps[-1]["id"]
-    r = c.post("/admin/atrium/%s/campaign" % CLIENT,
-               data={"campaign_id": new_id, "what": "updated what", "why": "uy", "next": "un", "ai_summary": "us"})
-    _check("admin update-campaign redirects", r.status_code == 302)
-    _check("campaign strategy updated",
-           workspace._find_campaign(workspace.load_workspace(CLIENT), new_id)["strategy"]["what"] == "updated what")
-
-    conv_before = len(workspace.load_workspace(CLIENT)["conversations"])
-    r = c.post("/admin/atrium/%s/conversation" % CLIENT,
-               data={"subject": "July creative", "sender_name": "Maya", "body": "Kicking off July."})
-    _check("admin start-conversation redirects", r.status_code == 302)
-    _check("conversation added", len(workspace.load_workspace(CLIENT)["conversations"]) == conv_before + 1)
-
-    r = c.post("/admin/atrium/%s/metrics" % CLIENT,
-               data={"today_leads": "12", "today_visitors": "400", "today_bookings": "5",
-                     "split_paid": "90", "split_organic": "70",
-                     "metric_value_0": "200", "metric_trend_0": "+30%", "metric_up_0": "1"})
-    _check("admin metrics redirects", r.status_code == 302)
-    ws2 = workspace.load_workspace(CLIENT)
-    _check("today updated", ws2["today"]["leads"] == 12)
-    _check("split updated", ws2["split"]["paid"] == 90)
-    _check("metric 0 value updated", ws2["metrics"][0]["value"] == "200")
+    # The console landing renders the welcome, links each card straight to the workspace, and hides
+    # the worked-example `template` client.
+    store.add_client(CLIENT, "Riverdance RV Resort")
+    store.add_client("template", "Template")
+    landing = c.get("/admin/atrium").get_data(as_text=True)
+    _check("console landing renders welcome", "Welcome to the Admin Portal" in landing)
+    _check("console card opens the workspace directly", ('href="/w/%s/"' % CLIENT) in landing)
+    _check("template client hidden from console", '<div class="name">Template</div>' not in landing)
+    store.remove_client("template")
 
     # ---- In-workspace admin editing (/w/<c>/admin/*), all JSON, super-admin only ----
     # Admin notice bar renders for a super-admin in the real workspace.
