@@ -138,7 +138,8 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
   and a confirmed **Delete** control (POST `/admin/atrium/<c>/delete` — `store.remove_client` +
   `workspace.delete_workspace`). **Add a new client** asks ONLY for a display name (key auto-derives,
   password auto-generates) and on success redirects STRAIGHT to the new client's blank `/w/<c>/`.
-  The portal landing shows **Open workspace** beside **Open dashboard**.
+  The portal landing shows **Open dashboard** per client; the workspace `/w/<c>/` stays reachable
+  directly and from the admin console.
 - **Strategy doc → AI strategy (optional, opt-in):** an admin attaches a Google Doc to a campaign and
   clicks "Generate strategy". `dash/atrium_docs.py` reads it (public-export fetch by default, or the
   **Google Drive API** when `ATRIUM_DOCS_ENABLED=1`) and `feedback_ai.summarize_strategy_sections`

@@ -116,8 +116,8 @@ save the opt-in Google-Doc summary feature (below). The product name lives in on
   summary,campaign,delete-campaign,content,edit-content,delete-content,content-comment,upload-creative,
   remove-creative,metrics,calendar,reply}`. The older dark operator console `/admin/atrium` +
   `/admin/atrium/<c>` (+ `/campaign`, `/content`, `/conversation`, `/reply`, `/metrics` POSTs) stays as
-  a fallback, gated `is_superadmin()`. The portal landing shows an **Open workspace** link per client
-  beside **Open dashboard**.
+  a fallback, gated `is_superadmin()`. The portal landing shows an **Open dashboard** link per client;
+  the workspace `/w/<c>/` stays reachable directly and from the admin console.
 - **Strategy doc → AI summary (optional, opt-in).** An admin pastes a Google Doc link on a campaign
   and clicks "Generate from doc". `dash/atrium_docs.py` reads it via the **Google Drive API** (lazy
   `googleapiclient`, runtime-SA ADC, `drive.readonly`; gated `ATRIUM_DOCS_ENABLED=1`; the doc must be

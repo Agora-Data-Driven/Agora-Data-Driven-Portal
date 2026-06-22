@@ -90,8 +90,6 @@
       padding: 9px 14px; border-radius: 10px; font-size: 13px; font-weight: 700;
       text-decoration: none; border: 1px solid transparent;
     }
-    .go.workspace { background: var(--ag-green); color: #fff; box-shadow: 0 6px 14px rgba(79,171,74,.24); }
-    .go.workspace:hover { background: var(--ag-green-d); }
     .go.dashboard { background: var(--ag-white); color: var(--ag-charcoal); border-color: var(--ag-line); }
     .go.dashboard:hover { border-color: var(--ag-purple); color: var(--ag-purple-d); }
 
@@ -180,7 +178,6 @@
             <p class="name">{{ c.name|default(c.key, true) }}</p>
             <p class="key">{{ c.key }}</p>
             <div class="go-row">
-              <a class="go workspace" href="/w/{{ c.key }}/">Open workspace &rarr;</a>
               <a class="go dashboard" href="/dashboard/{{ c.key }}">Open dashboard</a>
             </div>
           </div>
