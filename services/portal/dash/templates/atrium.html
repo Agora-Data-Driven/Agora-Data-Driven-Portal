@@ -1142,7 +1142,7 @@
                   <input class="ax-editbox" data-videourl value="{{ p.video_url|default('', true) }}" placeholder="Paste a video link (.mp4, YouTube, Vimeo…)">
                   <div class="ax-videoform-row">
                     <button class="ax-btn violet small" type="button" data-videolinksave="{{ p.id }}">Save link</button>
-                    <button class="ax-btn small" type="button" data-videoupload="{{ p.id }}">Upload .mp4</button>
+                    <button class="ax-btn small" type="button" data-videoupload="{{ p.id }}">Upload .mp4 (≤1&nbsp;GB)</button>
                     {% if p.video_url %}<button class="ax-btn danger small" type="button" data-videoremove="{{ p.id }}">Remove video</button>{% endif %}
                   </div>
                 </div>
@@ -2878,8 +2878,10 @@
       var file = input.files[0];
       var isMp4 = file.type === "video/mp4" || /\.mp4$/i.test(file.name);
       if (!isMp4) { adminMsg("Please choose an .mp4 file.", false); input.value = ""; return; }
+      var MAX_BYTES = 1024 * 1024 * 1024;          // hard ceiling: 1 GB
+      if (file.size > MAX_BYTES) { adminMsg("That video is over 1 GB. Please use a smaller file or paste a link.", false); input.value = ""; return; }
       var ctype = "video/mp4";
-      var DIRECT_MAX = 30 * 1024 * 1024;
+      var DIRECT_MAX = 30 * 1024 * 1024;           // <=30 MB goes through the app; larger -> direct to GCS
       btn.setAttribute("disabled", "disabled");
       function done() { window.location.reload(); }
       function fail(msg) { adminMsg(msg || "Upload failed. Try again.", false); btn.removeAttribute("disabled"); input.value = ""; }
