@@ -1146,12 +1146,18 @@ def atrium_admin_creative_upload_url(client):
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     try:
         url, _obj = workspace.signed_upload_url(client, content_id, mime)
-    except Exception:
+    except Exception as e:
         # Signing unavailable/misconfigured -> tell the client to fall back to the in-app upload.
-        app.logger.exception("creative-upload-url signing failed for %s/%s", client, content_id)
-        return jsonify(ok=False, error="sign_unavailable")
+        # app.logger isn't always wired to Cloud Run's log stream, so print the traceback to stderr
+        # (which IS captured) and surface the error detail (this route is super-admin only).
+        import sys
+        import traceback as _tb
+        sys.stderr.write("creative-upload-url signing failed for %s/%s\n" % (client, content_id))
+        _tb.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        return jsonify(ok=False, error="sign_unavailable", detail=str(e))
     if not url:
-        return jsonify(ok=False, error="sign_unavailable")
+        return jsonify(ok=False, error="sign_unavailable", detail="signer_returned_no_url")
     return jsonify(ok=True, url=url, mime=mime)
 
 
