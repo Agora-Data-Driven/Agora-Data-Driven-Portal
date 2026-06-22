@@ -213,6 +213,21 @@ def run():
            ('<video src="/w/%s/creative/RVR-099"' % CLIENT) in c.get("/w/%s/" % CLIENT).get_data(as_text=True))
     c.post("/w/%s/admin/remove-creative" % CLIENT, data={"content_id": "RVR-099"})
 
+    # Add-video "link" half: a pasted URL is stored on the piece, rendered for the client, then cleared.
+    r = c.post("/w/%s/admin/video-link" % CLIENT,
+               data={"content_id": "RVR-099", "url": "https://example.com/clip.mp4"})
+    _check("video-link save ok", r.status_code == 200 and r.get_json().get("ok") is True)
+    _camp, litem = workspace._find_content(workspace.load_workspace(CLIENT), "RVR-099")
+    _check("video_url stored", litem.get("video_url") == "https://example.com/clip.mp4")
+    _check("workspace renders <video> for a direct mp4 link",
+           '<video src="https://example.com/clip.mp4"' in c.get("/w/%s/" % CLIENT).get_data(as_text=True))
+    r = c.post("/w/%s/admin/video-link" % CLIENT,
+               data={"content_id": "RVR-099", "url": "javascript:alert(1)"})
+    _check("video-link rejects non-http url", r.status_code == 400 and r.get_json().get("ok") is False)
+    r = c.post("/w/%s/admin/video-link" % CLIENT, data={"content_id": "RVR-099", "url": ""})
+    _camp, litem = workspace._find_content(workspace.load_workspace(CLIENT), "RVR-099")
+    _check("video-link clear ok", r.status_code == 200 and litem.get("video_url") == "")
+
     # Reject a non-media upload (neither image nor video).
     r = c.post("/w/%s/admin/upload-creative" % CLIENT,
                data={"content_id": "RVR-099", "file": (io.BytesIO(b"x"), "a.txt", "text/plain")},

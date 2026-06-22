@@ -348,6 +348,12 @@
     .ax-shots-admin .ax-btn:hover { background: rgba(0,0,0,.6); }
     .ax-thumb.has-shots .ax-shots-admin .ax-btn { background: var(--ax-white); color: var(--ax-violet-d); border: 1px solid var(--ax-line); }
     .ax-thumb.has-shots .ax-shots-admin .ax-btn:hover { background: var(--ax-violet-bg); }
+    /* Add-video admin form + client-facing video block */
+    .ax-videoform { margin-top: 7px; display: flex; flex-direction: column; gap: 6px; }
+    .ax-videoform .ax-editbox { width: 100%; }
+    .ax-videoform-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .ax-videobox { margin: 8px 0 4px; }
+    .ax-videobox .ax-shot-media { width: 100%; max-height: 460px; border-radius: 12px; background: #000; }
     /* Click-to-enlarge lightbox (shared) */
     .ax-lightbox { position: fixed; inset: 0; z-index: 130; background: rgba(10,12,20,.92); display: grid; place-items: center; padding: 40px; }
     .ax-lightbox[hidden] { display: none; }
@@ -1110,6 +1116,16 @@
                   <div class="ax-shots-admin">
                     <button class="ax-btn small" type="button" data-addimages="{{ p.id }}">＋ Add picture(s)</button>
                     <input type="file" accept="image/*,video/*" multiple data-addinput="{{ p.id }}" style="display:none">
+                    <button class="ax-btn small" type="button" data-addvideo="{{ p.id }}">＋ Add video</button>
+                    <input type="file" accept="video/mp4,.mp4" data-addvideoinput="{{ p.id }}" style="display:none">
+                  </div>
+                  <div class="ax-videoform ax-edit-hidden" data-videoform="{{ p.id }}">
+                    <input class="ax-editbox" data-videourl value="{{ p.video_url|default('', true) }}" placeholder="Paste a video link (.mp4, YouTube, Vimeo…)">
+                    <div class="ax-videoform-row">
+                      <button class="ax-btn violet small" type="button" data-videolinksave="{{ p.id }}">Save link</button>
+                      <button class="ax-btn small" type="button" data-videoupload="{{ p.id }}">Upload .mp4</button>
+                      {% if p.video_url %}<button class="ax-btn danger small" type="button" data-videoremove="{{ p.id }}">Remove video</button>{% endif %}
+                    </div>
                   </div>
                   {% endif %}
                 </div>
@@ -1179,8 +1195,18 @@
                 <div class="ax-ref">{{ p.ref }} &middot; {{ p.decided_at|atrium_dt if p.decided_at else 'Drafted for review' }}</div>
                 <p class="ax-caption">{{ p.caption }}</p>
 
+                {% if p.video_url %}
+                <div class="ax-videobox">
+                  {% if p.video_url.split('?')[0].split('#')[0].lower().endswith(('.mp4', '.webm', '.mov', '.m4v', '.ogg')) %}
+                  <video src="{{ p.video_url }}" class="ax-shot-media" controls preload="metadata"></video>
+                  {% else %}
+                  <a class="ax-btn small" href="{{ p.video_url }}" target="_blank" rel="noopener noreferrer">▶ Watch video</a>
+                  {% endif %}
+                </div>
+                {% endif %}
+
                 <div data-noteslot>
-                  <textarea class="ax-noteinput" data-note data-saved="{{ p.client_note }}" placeholder="＋ Add a note for the AGORA team…">{{ p.client_note }}</textarea>
+                  <textarea class="ax-noteinput" data-note data-saved="{{ p.client_note }}" placeholder="＋ Add notes…">{{ p.client_note }}</textarea>
                 </div>
 
                 <div data-actionslot>
@@ -1231,21 +1257,21 @@
                 </div>
                 <div class="ax-edit-hidden" data-contentform="{{ p.id }}" style="margin-top:10px">
                   <div class="ax-editrow" style="grid-template-columns:1fr 1fr 1fr">
-                    <input class="ax-editbox" data-cf="ref" value="{{ p.ref }}" placeholder="Reference">
+                    <input class="ax-editbox" data-cf="ref" value="{{ p.ref }}" placeholder="Title Video">
                     {% set types = ['Blog Post','Static Post','Quizzes','Email','Newsletter','Video Edit'] %}
                     <select class="ax-editbox" data-cf="type_tag">
                       <option value="" disabled hidden>Type</option>
                       {% if p.type_tag and p.type_tag not in types %}<option value="{{ p.type_tag }}" selected>{{ p.type_tag }}</option>{% endif %}
                       {% for t in types %}<option value="{{ t }}"{% if p.type_tag == t %} selected{% endif %}>{{ t }}</option>{% endfor %}
                     </select>
-                    {% set plats = ['Facebook','Instagram','Google'] %}
+                    {% set plats = ['Facebook','Instagram','Google','TikTok','YouTube','LinkedIn','X (Twitter)'] %}
                     <select class="ax-editbox" data-cf="platform">
                       <option value="" disabled hidden>Platform</option>
                       {% if p.platform and p.platform not in plats %}<option value="{{ p.platform }}" selected>{{ p.platform }}</option>{% endif %}
                       {% for pl in plats %}<option value="{{ pl }}"{% if p.platform == pl %} selected{% endif %}>{{ pl }}</option>{% endfor %}
                     </select>
                   </div>
-                  <textarea class="ax-editbox" data-cf="caption" placeholder="Caption">{{ p.caption }}</textarea>
+                  <textarea class="ax-editbox" data-cf="caption" placeholder="Description">{{ p.caption }}</textarea>
                   <div class="ax-actions">
                     <button class="ax-btn violet small" type="button" data-contentsave="{{ p.id }}">Save details</button>
                     <button class="ax-btn ghost small" type="button" data-contentcancel="{{ p.id }}">Cancel</button>
@@ -1264,7 +1290,7 @@
                 <div class="ax-addpanel" data-addcontent="{{ c.id }}" style="border:0;background:transparent;padding:0;margin:0">
               <h3>Add content to {{ c.name }}</h3>
               <div class="ax-editrow" style="grid-template-columns:1fr 1fr 1fr">
-                <input class="ax-editbox" data-nc="ref" placeholder="Reference (e.g. RVR-018)">
+                <input class="ax-editbox" data-nc="ref" placeholder="Title Video (e.g. Launch teaser)">
                 <select class="ax-editbox" data-nc="type_tag">
                   <option value="" disabled selected hidden>Type (e.g. Static Post)</option>
                   <option value="Blog Post">Blog Post</option>
@@ -1279,9 +1305,14 @@
                   <option value="Facebook">Facebook</option>
                   <option value="Instagram">Instagram</option>
                   <option value="Google">Google</option>
+                  <option value="TikTok">TikTok</option>
+                  <option value="YouTube">YouTube</option>
+                  <option value="LinkedIn">LinkedIn</option>
+                  <option value="X (Twitter)">X (Twitter)</option>
                 </select>
               </div>
-              <textarea class="ax-editbox" data-nc="caption" placeholder="Caption the client will review…"></textarea>
+              <textarea class="ax-editbox" data-nc="caption" placeholder="Description the client will review…"></textarea>
+              <input class="ax-editbox" data-nc="video_url" placeholder="Video link (optional) — paste an .mp4 or YouTube/Vimeo URL">
               <div class="ax-newpics">
                 <button class="ax-btn ghost small" type="button" data-newcontentpick="{{ c.id }}">＋ Add picture(s)</button>
                 <input type="file" accept="image/*,video/*" multiple data-newcontentinput="{{ c.id }}" style="display:none">
@@ -2829,6 +2860,48 @@
     btn.addEventListener("click", function (ev) {
       ev.stopPropagation();
       adminAction("/admin/remove-image", { content_id: btn.getAttribute("data-removeimg"), image_id: btn.getAttribute("data-imgid") }, btn);
+    });
+  });
+
+  // Admin: add a video to a content piece — either a pasted link OR an .mp4 file upload (mp4 only).
+  // The link half posts to /admin/video-link; the file half reuses the creative upload (add-images),
+  // which already stores and renders video creatives.
+  qsa("[data-addvideo]").forEach(function (btn) {
+    var form = document.querySelector('[data-videoform="' + btn.getAttribute("data-addvideo") + '"]');
+    btn.addEventListener("click", function (ev) { ev.stopPropagation(); if (form) { form.classList.toggle("ax-edit-hidden"); } });
+  });
+  qsa("[data-videolinksave]").forEach(function (btn) {
+    var id = btn.getAttribute("data-videolinksave");
+    var form = document.querySelector('[data-videoform="' + id + '"]');
+    var input = form ? form.querySelector("[data-videourl]") : null;
+    btn.addEventListener("click", function () {
+      var url = input ? input.value.trim() : "";
+      if (url && url.indexOf("http://") !== 0 && url.indexOf("https://") !== 0) {
+        adminMsg("Enter a valid http(s) video link.", false);
+        return;
+      }
+      adminAction("/admin/video-link", { content_id: id, url: url }, btn);
+    });
+  });
+  qsa("[data-videoremove]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      adminAction("/admin/video-link", { content_id: btn.getAttribute("data-videoremove"), url: "" }, btn);
+    });
+  });
+  qsa("[data-videoupload]").forEach(function (btn) {
+    var id = btn.getAttribute("data-videoupload");
+    var input = document.querySelector('[data-addvideoinput="' + id + '"]');
+    if (!input) { return; }
+    btn.addEventListener("click", function () { input.click(); });
+    input.addEventListener("change", function () {
+      if (!input.files || !input.files.length) { return; }
+      var f = input.files[0];
+      var isMp4 = f.type === "video/mp4" || /\.mp4$/i.test(f.name);
+      if (!isMp4) { adminMsg("Please choose an .mp4 file.", false); input.value = ""; return; }
+      btn.setAttribute("disabled", "disabled");
+      uploadImages(id, [f])
+        .then(function () { window.location.reload(); })
+        .catch(function () { btn.removeAttribute("disabled"); adminMsg("Upload failed. The file may exceed 30 MB — use a link instead.", false); });
     });
   });
 
