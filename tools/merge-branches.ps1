@@ -47,6 +47,8 @@
 #      path -> deploy-script mapping in Resolve-DeployPlan below.
 #   7. PRUNE: delete the remote dev branches whose commits are now contained in origin/main
 #      (safe by construction -- it can never drop unmerged work).
+#   8. PULL: leave the LOCAL checkout on main and fast-forwarded to origin/main, so your
+#      VS Code is completely aligned with what just landed (--ff-only, never clobbers work).
 #
 # FLAGS (opt out of pieces of the pipeline):
 #   -DryRun        do steps 1-4 locally, then PRINT the land + deploy + prune plan and
@@ -159,6 +161,21 @@ function Remove-RemoteBranches([string[]]$Branches) {
     }
 }
 
+# Bring the LOCAL checkout fully in line with origin/main so VS Code reflects exactly what
+# is on main -- switch to main and fast-forward to the freshly-fetched origin/main. This is
+# the "pull" the developer asked for. --ff-only guarantees it can NEVER clobber local work:
+# it no-ops when main is already current, fast-forwards when behind, and merely WARNS (never
+# force-moves) if local main has somehow diverged.
+function Sync-LocalMain {
+    Write-Host "[..] Pulling: aligning local main with origin/main (so VS Code matches main)" -ForegroundColor Cyan
+    git fetch origin *>$null
+    git switch main 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Host "    [warn] could not switch to local main -- skipping pull" -ForegroundColor Yellow; return }
+    git merge --ff-only origin/main 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "[OK] local main aligned with origin/main ($(git rev-parse --short HEAD))" -ForegroundColor Green }
+    else { Write-Host "    [warn] local main has diverged from origin/main -- NOT fast-forwarding (resolve manually)" -ForegroundColor Yellow }
+}
+
 # =============================================================================
 # -DeleteMerged is a standalone, GATED cleanup -- it never runs the merge.
 # =============================================================================
@@ -207,7 +224,11 @@ $branches = git branch -r --format='%(refname:short)' |
     ForEach-Object { $_ -replace '^origin/', '' } |
     Where-Object { $_ -and ($skip -notcontains $_) }
 
-if (-not $branches) { Write-Host "[OK] no dev branches to merge -- main is already current." -ForegroundColor Green; exit 0 }
+if (-not $branches) {
+    Write-Host "[OK] no dev branches to merge -- origin/main is already current." -ForegroundColor Green
+    Sync-LocalMain   # nothing to integrate, but still pull so the LOCAL checkout matches origin/main
+    exit 0
+}
 Write-Host "[OK] branches to integrate: $($branches -join ', ')"
 
 # =============================================================================
@@ -350,5 +371,12 @@ if (-not $NoPrune) {
     }
 }
 
+# =============================================================================
+# 8. PULL: leave the LOCAL checkout on main and fast-forwarded to origin/main, so the
+#    developer's VS Code is completely aligned with what just landed (no-op on the happy
+#    path, where main was already advanced + pushed above -- but guarantees it on every run).
+# =============================================================================
+Sync-LocalMain
+
 Write-Host ""
-Write-Host "[OK] DONE -- integrated, landed on main, deployed, and pruned." -ForegroundColor Green
+Write-Host "[OK] DONE -- integrated, landed on main, deployed, pruned, and local main pulled." -ForegroundColor Green
