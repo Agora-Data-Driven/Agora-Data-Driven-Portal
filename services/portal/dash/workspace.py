@@ -810,3 +810,19 @@ def delete_communication(client, kind, item_id):
         ws[key] = [it for it in ws.get(key, []) if it.get("id") != item_id]
         return ws[key]
     return _mutate(client, fn)
+
+
+def update_communication(client, kind, item_id, fields):
+    """Edit an email/meeting summary's fields in place by id. Email accepts subject/summary; meeting
+    accepts title/attendees/summary. Returns the updated item, or None if not found."""
+    key = "email_summaries" if kind == "email" else "meeting_summaries"
+    allowed = ("subject", "summary") if kind == "email" else ("title", "attendees", "summary")
+    def fn(ws):
+        for it in ws.get(key, []):
+            if it.get("id") == item_id:
+                for k in allowed:
+                    if k in (fields or {}):
+                        it[k] = fields[k]
+                return it
+        return None
+    return _mutate(client, fn)

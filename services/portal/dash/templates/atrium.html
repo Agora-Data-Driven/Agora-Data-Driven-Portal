@@ -1372,33 +1372,79 @@
               <h2>{{ ic('mail') }} Email Summary</h2>
               {% if ws.email_summaries %}
                 {% for e in ws.email_summaries %}
-                <div class="ax-card ax-comm-item">
+                <div class="ax-card ax-comm-item" data-comm="{{ e.id }}">
                   <div class="ax-comm-top">
                     <span class="ax-comm-title">{{ e.subject }}</span>
                     <span class="ax-comm-date">{{ e.date|atrium_dt }}</span>
                   </div>
                   <p class="ax-comm-body">{{ e.summary }}</p>
+                  {% if is_superadmin %}
+                  <div class="ax-admin-tools">
+                    <button class="ax-btn admin small" type="button" data-commedit="{{ e.id }}">Edit</button>
+                    <button class="ax-btn danger small" type="button" data-commdelete="{{ e.id }}" data-commkind="email">Delete</button>
+                  </div>
+                  <div class="ax-edit-hidden" data-commform="{{ e.id }}" style="margin-top:10px">
+                    <input class="ax-editbox" data-cm="subject" value="{{ e.subject }}" placeholder="Subject">
+                    <textarea class="ax-editbox" data-cm="summary" placeholder="What the email covered…">{{ e.summary }}</textarea>
+                    <div class="ax-actions">
+                      <button class="ax-btn violet small" type="button" data-commsave="{{ e.id }}" data-commkind="email">Save</button>
+                      <button class="ax-btn ghost small" type="button" data-commcancel="{{ e.id }}">Cancel</button>
+                    </div>
+                  </div>
+                  {% endif %}
                 </div>
                 {% endfor %}
               {% else %}
                 <div class="ax-empty">No email summaries yet.</div>
+              {% endif %}
+              {% if is_superadmin %}
+              <div class="ax-admin-tools" data-commadd-email>
+                <span class="ax-doc-label" style="width:100%">Add an email summary</span>
+                <input class="ax-editbox" data-ce="subject" placeholder="Subject">
+                <textarea class="ax-editbox" data-ce="summary" placeholder="What the email covered…"></textarea>
+                <button class="ax-btn green small" type="button" data-commaddbtn="email">{{ ic('mail') }} Add email summary</button>
+              </div>
               {% endif %}
             </div>
             <div class="ax-comm-col meeting">
               <h2>{{ ic('calendar') }} Meeting Summary</h2>
               {% if ws.meeting_summaries %}
                 {% for mtg in ws.meeting_summaries %}
-                <div class="ax-card ax-comm-item">
+                <div class="ax-card ax-comm-item" data-comm="{{ mtg.id }}">
                   <div class="ax-comm-top">
                     <span class="ax-comm-title">{{ mtg.title }}</span>
                     <span class="ax-comm-date">{{ mtg.date|atrium_dt }}</span>
                   </div>
                   {% if mtg.attendees %}<div class="ax-comm-meta">{{ ic('users') }} {{ mtg.attendees }}</div>{% endif %}
                   <p class="ax-comm-body">{{ mtg.summary }}</p>
+                  {% if is_superadmin %}
+                  <div class="ax-admin-tools">
+                    <button class="ax-btn admin small" type="button" data-commedit="{{ mtg.id }}">Edit</button>
+                    <button class="ax-btn danger small" type="button" data-commdelete="{{ mtg.id }}" data-commkind="meeting">Delete</button>
+                  </div>
+                  <div class="ax-edit-hidden" data-commform="{{ mtg.id }}" style="margin-top:10px">
+                    <input class="ax-editbox" data-cm="title" value="{{ mtg.title }}" placeholder="Meeting title">
+                    <input class="ax-editbox" data-cm="attendees" value="{{ mtg.attendees }}" placeholder="Attendees (optional)">
+                    <textarea class="ax-editbox" data-cm="summary" placeholder="Meeting notes…">{{ mtg.summary }}</textarea>
+                    <div class="ax-actions">
+                      <button class="ax-btn violet small" type="button" data-commsave="{{ mtg.id }}" data-commkind="meeting">Save</button>
+                      <button class="ax-btn ghost small" type="button" data-commcancel="{{ mtg.id }}">Cancel</button>
+                    </div>
+                  </div>
+                  {% endif %}
                 </div>
                 {% endfor %}
               {% else %}
                 <div class="ax-empty">No meeting summaries yet.</div>
+              {% endif %}
+              {% if is_superadmin %}
+              <div class="ax-admin-tools" data-commadd-meeting>
+                <span class="ax-doc-label" style="width:100%">Add a meeting summary</span>
+                <input class="ax-editbox" data-cmt="title" placeholder="Meeting title">
+                <input class="ax-editbox" data-cmt="attendees" placeholder="Attendees (optional)">
+                <textarea class="ax-editbox" data-cmt="summary" placeholder="Meeting notes…"></textarea>
+                <button class="ax-btn green small" type="button" data-commaddbtn="meeting">{{ ic('calendar') }} Add meeting summary</button>
+              </div>
               {% endif %}
             </div>
           </div>
@@ -2204,6 +2250,40 @@
       var panel = document.querySelector("[data-reachform]");
       btn.addEventListener("click", function () {
         adminAction("/admin/reach", fieldsFrom(panel, "data-rf", {}), btn);
+      });
+    });
+
+    // --- Client Communications: add / edit / delete email & meeting summaries (super-admin) ---
+    qsa("[data-commedit]").forEach(function (btn) {
+      var form = document.querySelector('[data-commform="' + btn.getAttribute("data-commedit") + '"]');
+      btn.addEventListener("click", function () { if (form) { form.classList.toggle("ax-edit-hidden"); } });
+    });
+    qsa("[data-commcancel]").forEach(function (btn) {
+      var form = document.querySelector('[data-commform="' + btn.getAttribute("data-commcancel") + '"]');
+      btn.addEventListener("click", function () { if (form) { form.classList.add("ax-edit-hidden"); } });
+    });
+    qsa("[data-commsave]").forEach(function (btn) {
+      var id = btn.getAttribute("data-commsave");
+      var kind = btn.getAttribute("data-commkind");
+      var form = document.querySelector('[data-commform="' + id + '"]');
+      btn.addEventListener("click", function () {
+        adminAction("/admin/communication", fieldsFrom(form, "data-cm", { op: "edit", kind: kind, item_id: id }), btn);
+      });
+    });
+    qsa("[data-commdelete]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (!window.confirm("Delete this summary? This cannot be undone.")) { return; }
+        adminAction("/admin/communication", { op: "delete", kind: btn.getAttribute("data-commkind"), item_id: btn.getAttribute("data-commdelete") }, btn);
+      });
+    });
+    qsa("[data-commaddbtn]").forEach(function (btn) {
+      var isEmail = btn.getAttribute("data-commaddbtn") === "email";
+      var panel = document.querySelector(isEmail ? "[data-commadd-email]" : "[data-commadd-meeting]");
+      btn.addEventListener("click", function () {
+        var fields = fieldsFrom(panel, isEmail ? "data-ce" : "data-cmt", { op: "add", kind: isEmail ? "email" : "meeting" });
+        var hasContent = isEmail ? (fields.subject || fields.summary) : (fields.title || fields.summary);
+        if (!hasContent) { adminMsg("Add a subject/title or a summary first.", false); return; }
+        adminAction("/admin/communication", fields, btn);
       });
     });
 

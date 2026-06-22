@@ -1271,6 +1271,39 @@ def atrium_admin_reach(client):
     return jsonify(ok=True)
 
 
+@app.route("/w/<client>/admin/communication", methods=["POST"])
+def atrium_admin_communication(client):
+    """Add, edit, or delete an email/meeting summary in the Client Communications tab. `op` is
+    'add' | 'edit' | 'delete'; `kind` is 'email' | 'meeting'."""
+    gate = _atrium_admin_json_gate(client)
+    if gate:
+        return gate
+    if workspace.load_workspace(client) is None:
+        return Response('{"error":"no_workspace"}', status=404, mimetype="application/json")
+    op = request.form.get("op", "").strip()
+    kind = "email" if request.form.get("kind", "").strip() == "email" else "meeting"
+    if op == "delete":
+        workspace.delete_communication(client, kind, request.form.get("item_id", "").strip())
+        return jsonify(ok=True)
+    if op == "add":
+        if kind == "email":
+            item = workspace.add_email_summary(client, request.form.get("subject", "").strip(),
+                                               request.form.get("summary", "").strip())
+        else:
+            item = workspace.add_meeting_summary(client, request.form.get("title", "").strip(),
+                                                 request.form.get("summary", "").strip(),
+                                                 request.form.get("attendees", "").strip())
+        return jsonify(ok=True, id=item.get("id"))
+    if op == "edit":
+        fields = {}
+        for key in ("subject", "title", "attendees", "summary"):
+            if request.form.get(key) is not None:
+                fields[key] = request.form.get(key, "").strip()
+        workspace.update_communication(client, kind, request.form.get("item_id", "").strip(), fields)
+        return jsonify(ok=True)
+    return Response('{"error":"bad_op"}', status=400, mimetype="application/json")
+
+
 @app.route("/w/<client>/admin/dashboard-url", methods=["POST"])
 def atrium_admin_dashboard_url(client):
     """Set the per-client Looker Studio embed URL (https only; empty hides the dashboard) and the
