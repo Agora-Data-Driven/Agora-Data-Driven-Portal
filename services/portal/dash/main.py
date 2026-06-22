@@ -203,6 +203,10 @@ def _post_login_destination(granted, next_url):
 def index():
     if not authed():
         return redirect(url_for("login", next="/"))
+    # The team console IS the landing page for the agency operator -- a super-admin never sees the
+    # old client portal page; they go straight to /admin/atrium. Clients still land on their portal.
+    if is_superadmin():
+        return redirect(url_for("admin_atrium"))
     return render_template(
         "portal.html",
         user=current_user(),
