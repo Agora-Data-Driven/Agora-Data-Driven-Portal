@@ -998,6 +998,7 @@ def atrium_admin_add_content(client):
         "sub_tag": request.form.get("sub_tag", "").strip(),
         "platform": request.form.get("platform", "").strip(),
         "caption": request.form.get("caption", "").strip(),
+        "video_url": request.form.get("video_url", "").strip(),
     }
     if content["ref"]:
         content["id"] = content["ref"]
@@ -1017,11 +1018,33 @@ def atrium_admin_edit_content(client):
         return gate
     content_id = request.form.get("content_id", "").strip()
     fields = {}
-    for key in ("ref", "type_tag", "sub_tag", "platform", "caption"):
+    for key in ("ref", "type_tag", "sub_tag", "platform", "caption", "video_url"):
         if request.form.get(key) is not None:
             fields[key] = request.form.get(key, "").strip()
     try:
         item = workspace.update_content(client, content_id, fields)
+    except KeyError:
+        return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    return jsonify(ok=True, content=item)
+
+
+@app.route("/w/<client>/admin/video-link", methods=["POST"])
+def atrium_admin_video_link(client):
+    """Attach (or clear) a video by URL on a content piece. An empty url removes the link.
+
+    This is the 'provide a link' half of the Add-video control; the '.mp4 file' half reuses the
+    existing creative upload (/admin/add-images), which already stores and renders video creatives.
+    """
+    gate = _atrium_admin_json_gate(client)
+    if gate:
+        return gate
+    content_id = request.form.get("content_id", "").strip()
+    url = request.form.get("url", "").strip()
+    # Only accept http(s) links (or an empty string to clear); never store javascript:/data: URIs.
+    if url and not (url.startswith("http://") or url.startswith("https://")):
+        return jsonify(ok=False, message="Enter a valid http(s) video link."), 400
+    try:
+        item = workspace.update_content(client, content_id, {"video_url": url})
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     return jsonify(ok=True, content=item)
