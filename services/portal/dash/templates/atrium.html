@@ -623,6 +623,9 @@
     /* Two ways to send a comment, stacked so "Request changes" sits above "Comment". */
     .ax-com-send { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
     .ax-com-send .ax-btn { width: 100%; justify-content: center; white-space: nowrap; }
+    /* "Request changes" -> dark Data Green CTA (matches Add content, a notch darker). */
+    .ax-com-send .ax-btn.green { background: linear-gradient(135deg, var(--ax-green-d) 0%, #234F20 100%); color: #fff; border-color: transparent; box-shadow: 0 1px 2px rgba(16,24,40,.12); }
+    .ax-com-send .ax-btn.green:hover { background: linear-gradient(135deg, #234F20 0%, #163614 100%); }
 
     /* ---- Super-admin inline editing ---- */
     .ax-adminbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; padding: 10px 14px; background: #1c2440; color: #eaf0ff; border-radius: 12px; font-size: 13px; }
@@ -1244,7 +1247,7 @@
                   <div class="ax-com-form">
                     <textarea data-cominput placeholder="Add a comment…  (Enter to send)"></textarea>
                     <div class="ax-com-send">
-                      <button class="ax-btn ghost small" type="button" data-comsend="{{ p.id }}" data-comkind="changes">Request changes</button>
+                      <button class="ax-btn green small" type="button" data-comsend="{{ p.id }}" data-comkind="changes">Request changes</button>
                       <button class="ax-btn violet small" type="button" data-comsend="{{ p.id }}" data-comkind="comment">Comment</button>
                     </div>
                   </div>
@@ -1315,7 +1318,9 @@
               <input class="ax-editbox" data-nc="video_url" placeholder="Video link (optional) — paste an .mp4 or YouTube/Vimeo URL">
               <div class="ax-newpics">
                 <button class="ax-btn ghost small" type="button" data-newcontentpick="{{ c.id }}">＋ Add picture(s)</button>
-                <input type="file" accept="image/*,video/*" multiple data-newcontentinput="{{ c.id }}" style="display:none">
+                <input type="file" accept="image/*" multiple data-newcontentinput="{{ c.id }}" style="display:none">
+                <button class="ax-btn ghost small" type="button" data-newvideopick="{{ c.id }}">＋ Add Video</button>
+                <input type="file" accept="video/mp4,video/*" data-newvideoinput="{{ c.id }}" style="display:none">
                 <span class="ax-newpics-status" data-newcontentcount="{{ c.id }}"></span>
               </div>
               <button class="ax-btn green small" type="button" data-addcontentbtn="{{ c.id }}">{{ ic('check') }} Add content &amp; notify client</button>
@@ -2513,32 +2518,58 @@
       var picInput = document.querySelector('[data-newcontentinput="' + id + '"]');
       var picBtn = document.querySelector('[data-newcontentpick="' + id + '"]');
       var picCount = document.querySelector('[data-newcontentcount="' + id + '"]');
+      var vidInput = document.querySelector('[data-newvideoinput="' + id + '"]');
+      var vidBtn = document.querySelector('[data-newvideopick="' + id + '"]');
+      // Both pickers feed the same "files" upload (add-images stores and renders videos too); the
+      // shared status line reports whatever is staged for the new piece.
+      function refreshCount() {
+        if (!picCount) { return; }
+        var parts = [];
+        var np = (picInput && picInput.files) ? picInput.files.length : 0;
+        var nv = (vidInput && vidInput.files) ? vidInput.files.length : 0;
+        if (np) { parts.push(np + " picture(s)"); }
+        if (nv) { parts.push("1 video"); }
+        picCount.textContent = parts.length ? (parts.join(" + ") + " ready to upload") : "";
+      }
       if (picBtn && picInput) {
         picBtn.addEventListener("click", function () { picInput.click(); });
-        picInput.addEventListener("change", function () {
-          var n = picInput.files ? picInput.files.length : 0;
-          if (picCount) { picCount.textContent = n ? (n + " picture(s) ready to upload") : ""; }
+        picInput.addEventListener("change", refreshCount);
+      }
+      if (vidBtn && vidInput) {
+        vidBtn.addEventListener("click", function () { vidInput.click(); });
+        vidInput.addEventListener("change", function () {
+          if (vidInput.files && vidInput.files.length) {
+            var f = vidInput.files[0];
+            var isMp4 = f.type === "video/mp4" || /\.mp4$/i.test(f.name);
+            if (!isMp4) { adminMsg("Please choose an .mp4 video.", false); vidInput.value = ""; }
+          }
+          refreshCount();
         });
       }
       btn.addEventListener("click", function () {
         var fields = fieldsFrom(panel, "data-nc", { campaign_id: id });
         var hasPics = !!(picInput && picInput.files && picInput.files.length);
-        if (!fields.ref && !fields.type_tag && !fields.caption && !hasPics) {
-          adminMsg("Add at least a reference, type, caption, or a picture.", false); return;
+        var hasVid = !!(vidInput && vidInput.files && vidInput.files.length);
+        if (!fields.ref && !fields.type_tag && !fields.caption && !hasPics && !hasVid) {
+          adminMsg("Add at least a reference, type, caption, a picture, or a video.", false); return;
         }
         btn.setAttribute("disabled", "disabled");
-        if (hasPics) { adminMsg("Adding content and uploading picture(s)…", true); }
-        // Create the content first, then attach the chosen pictures to its new id before reloading.
+        if (hasPics || hasVid) { adminMsg("Adding content and uploading media…", true); }
+        // Create the content first, then attach the chosen pictures/video to its new id before reloading.
         post("/admin/content", fields)
           .then(function (data) {
             var newId = data ? data.id : null;
-            if (!hasPics || !newId) { window.location.reload(); return; }
-            uploadImages(newId, picInput.files)
+            if ((!hasPics && !hasVid) || !newId) { window.location.reload(); return; }
+            var files = [];
+            var i;
+            if (hasPics) { for (i = 0; i < picInput.files.length; i++) { files.push(picInput.files[i]); } }
+            if (hasVid) { files.push(vidInput.files[0]); }
+            uploadImages(newId, files)
               .then(function () { window.location.reload(); })
               .catch(function () {
-                // The content piece WAS created; only the picture(s) failed. Show it, with a note.
-                adminMsg("Content added, but the picture(s) failed. Open the new card to add them.", false);
-                window.setTimeout(function () { window.location.reload(); }, 2000);
+                // The content piece WAS created; only the media failed. Show it, with a note.
+                adminMsg("Content added, but the media failed (a video may exceed 30 MB — use a link). Open the new card to add it.", false);
+                window.setTimeout(function () { window.location.reload(); }, 2500);
               });
           })
           .catch(function () {
