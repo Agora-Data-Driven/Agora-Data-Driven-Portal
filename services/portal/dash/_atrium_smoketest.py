@@ -234,6 +234,11 @@ def run():
     _check("team comment ok", r.status_code == 200)
     _camp, v099b = workspace._find_content(workspace.load_workspace(CLIENT), "RVR-099")
     _check("team comment persisted (sender agora)", v099b["comments"][-1]["sender"] == "agora")
+    # The Delete-comment control renders for the team on PAID/lead-gen content too (not just organic):
+    # RVR-099 lives on c_paid_1, so its comment's Delete button must appear in the leadgen render.
+    _paid_cm = v099b["comments"][-1]["id"]
+    _check("team Delete-comment button renders on paid content",
+           ('data-comdelete="%s"' % _paid_cm) in c.get("/w/%s/leadgen" % CLIENT).get_data(as_text=True))
 
     # Upload a creative, fetch it back through the authed proxy, then remove it.
     png = b"\x89PNG\r\n\x1a\n" + b"riverdance-creative-bytes"
@@ -409,9 +414,40 @@ def run():
                  "generate-summary", "upload-creative", "reply"):
         _check("admin route /%s forbidden for grantee" % path,
                c.post("/w/%s/admin/%s" % (CLIENT, path), data={}).status_code == 403)
-    # But a grantee CAN comment + re-decide (client powers).
-    _check("grantee can comment",
-           c.post("/w/%s/comment" % CLIENT, data={"content_id": "RVR-014", "body": "hi"}).status_code == 200)
+    # But a grantee CAN comment + re-decide (client powers). A "Request changes" comment is a client
+    # power; RESOLVING it is TEAM-ONLY -- the grantee is forbidden, and the resolve button is not
+    # rendered in their view (gated is_superadmin).
+    rc = c.post("/w/%s/comment" % CLIENT,
+                data={"content_id": "RVR-014", "body": "please tweak", "kind": "changes"})
+    _check("grantee can request changes via comment", rc.status_code == 200)
+    cm_id = rc.get_json()["comment"]["id"]
+    _check("resolve-comment is team-only (grantee 403)",
+           c.post("/w/%s/resolve-comment" % CLIENT,
+                  data={"content_id": "RVR-014", "comment_id": cm_id}).status_code == 403)
+    _check("resolve button NOT rendered for grantee",
+           'data-comresolve="%s"' % cm_id not in c.get("/w/%s/organic" % CLIENT).get_data(as_text=True))
+
+    # A grantee CAN set the client's own logo from inside the workspace (client-facing /w/<c>/logo).
+    logo_png = b"\x89PNG\r\n\x1a\n" + b"riverdance-logo-bytes"
+    rl = c.post("/w/%s/logo" % CLIENT,
+                data={"logo": (io.BytesIO(logo_png), "logo.png", "image/png")},
+                content_type="multipart/form-data")
+    _check("grantee logo upload ok", rl.status_code == 200 and rl.get_json().get("ok") is True)
+    _check("logo persisted inline as a data: URI img",
+           "data:image/png;base64," in (workspace.load_workspace(CLIENT).get("brand", {}).get("client_logo") or ""))
+    _check("non-image logo upload rejected (400)",
+           c.post("/w/%s/logo" % CLIENT,
+                  data={"logo": (io.BytesIO(b"x"), "a.txt", "text/plain")},
+                  content_type="multipart/form-data").status_code == 400)
+
+    # The team CAN resolve the grantee's change request.
+    with c.session_transaction() as s:
+        s.update(SUPER)
+    _check("team can resolve a change request",
+           c.post("/w/%s/resolve-comment" % CLIENT,
+                  data={"content_id": "RVR-014", "comment_id": cm_id}).get_json().get("ok") is True)
+    with c.session_transaction() as s:
+        s.update({"ok": True, "user": "owner@riverdanceresort.com", "clients": [CLIENT]})
 
     # A user who cannot open the client is forbidden.
     with c.session_transaction() as s:

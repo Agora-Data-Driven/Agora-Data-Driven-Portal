@@ -810,6 +810,39 @@ def atrium_save_notify(client):
     return jsonify(ok=True)
 
 
+@app.route("/w/<client>/logo", methods=["POST"])
+def atrium_client_logo(client):
+    """Let a workspace member set the client's own logo from INSIDE the workspace (no console needed).
+
+    Client-facing twin of the team console's /admin/atrium/<c>/logo: any user who can open this
+    workspace may replace its logo by clicking the side-panel crest. Stored INLINE in the workspace
+    brand (brand.client_logo) as a self-contained <img> data: URI -- exactly how seeded logos are
+    embedded, so it needs no new infra or separate object. Returns the new markup as JSON so the side
+    panel can swap it in place (no reload)."""
+    gate = _atrium_json_gate(client)
+    if gate:
+        return gate
+    upload = request.files.get("logo")
+    if upload is None or not upload.filename:
+        return Response('{"ok":false,"error":"no_file"}', status=400, mimetype="application/json")
+    mime = (upload.mimetype or "").lower()
+    if mime not in _ATRIUM_IMAGE_EXT:
+        return Response('{"ok":false,"error":"bad_type"}', status=400, mimetype="application/json")
+    data = upload.read(LOGO_MAX_BYTES + 1)
+    if len(data) > LOGO_MAX_BYTES:
+        return Response('{"ok":false,"error":"too_large"}', status=400, mimetype="application/json")
+    # Embed as a data: URI inside an <img> (NOT inlined SVG markup): an <img> never executes script,
+    # so an uploaded SVG cannot inject anything when the markup is later rendered with |safe.
+    import base64  # lazy: only the logo path needs it
+    b64 = base64.b64encode(data).decode("ascii")
+    logo_markup = '<img src="data:%s;base64,%s" alt="logo">' % (mime, b64)
+    try:
+        workspace.set_client_logo(client, logo_markup)
+    except KeyError:
+        return Response('{"ok":false,"error":"no_workspace"}', status=404, mimetype="application/json")
+    return jsonify(ok=True, logo=logo_markup)
+
+
 @app.route("/w/<client>/comment", methods=["POST"])
 def atrium_comment(client):
     """Append a client comment to a content piece (client-facing); notifies the AGORA team.
@@ -842,8 +875,11 @@ def atrium_comment(client):
 
 @app.route("/w/<client>/resolve-comment", methods=["POST"])
 def atrium_resolve_comment(client):
-    """Mark a "Request changes" comment resolved (client or team); may return the piece to 'awaiting'."""
-    gate = _atrium_json_gate(client)
+    """Mark a "Request changes" comment resolved (TEAM only); may return the piece to 'awaiting'.
+
+    Resolving is a team action: only the Agora team decides a change request is addressed. Clients
+    raise change requests (via /comment kind=changes) but cannot resolve them -- hence the admin gate."""
+    gate = _atrium_admin_json_gate(client)
     if gate:
         return gate
     content_id = request.form.get("content_id", "").strip()

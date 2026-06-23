@@ -142,18 +142,26 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
   opens a workspace, the SAME client UI renders extra edit affordances (`{% if is_superadmin %}` +
   `data-admin="1"`), posting JSON to `/w/<c>/admin/*`: `strategy`, `strategy-doc`, `generate-summary`,
   `summary`, `campaign`, `delete-campaign`, `content`, `edit-content`, `delete-content`,
-  `content-comment`, `add-images`, `remove-image`, `upload-creative`, `creative-upload-url`,
+  `content-comment`, `delete-comment` (delete any thread comment, on paid AND organic), `add-images`,
+  `remove-image`, `upload-creative`, `creative-upload-url`,
   `creative-confirm`, `remove-creative`, `metrics`, `calendar`, `reply`. This in-place surface is the
   ONLY editing path — the old per-client `/admin/atrium/<c>` console page (and its
   password/campaign/content/conversation/reply/metrics POSTs) has been removed. **Clients** approve in place (`/approve`) and
   post threaded `/w/<c>/comment`s; "Request changes" now lives IN the comment thread as a
-  `kind:"changes"` comment (light-red, flagged) that flips status to `changes` and exposes a
-  **Resolve** button (`/resolve-comment`) — resolving the last open one returns the piece to
-  `awaiting`. All of it updates in place (no reload), so the organic dropdown stays open.
+  `kind:"changes"` comment (light-red, flagged) that flips status to `changes`. Raising a change
+  request is a CLIENT power; **resolving it is TEAM-ONLY** — the **Resolve** button (`/resolve-comment`,
+  gated `is_superadmin()`) renders only for the team, and resolving the last open one returns the piece
+  to `awaiting`. All of it updates in place (no reload), so the organic dropdown stays open.
+- **Clients can set their OWN logo from inside the workspace:** the side-panel crest is a hover-to-upload
+  control — hovering reveals a "Change logo" overlay; clicking opens a file picker that POSTs to
+  `/w/<c>/logo` (client-facing, gated `authed()`+`can_open(<c>)`, image-only ≤512 KB). It is the
+  client-facing twin of the team console's `/admin/atrium/<c>/logo`: the image is embedded INLINE as a
+  `brand.client_logo` `<img>` data-URI (same posture as seeded logos — no new infra/object), and the
+  crest swaps in place on success.
 - **Routes (all behind existing session auth):** client `GET /w/<c>/` + `/w/<c>/<tab>` (overview,
   dashboard, leadgen, organic, calendar, conversations, settings) gated `authed()`+`can_open(<c>)`;
-  client POSTs `/w/<c>/{approve,request-changes,save-note,comment,resolve-comment,send-message,save-notify}` +
-  creative GET above; admin POSTs `/w/<c>/admin/*` gated `is_superadmin()`. The team console is the
+  client POSTs `/w/<c>/{approve,request-changes,save-note,comment,send-message,save-notify,logo}` +
+  creative GET above; team-only POSTs `/w/<c>/resolve-comment` + `/w/<c>/admin/*` gated `is_superadmin()`. The team console is the
   **landing page only** (`GET /admin/atrium`, gated `is_superadmin()`): a welcome banner + one card
   per client (the worked-example `template` client is filtered out). **Clicking a card opens that
   client's workspace `/w/<c>/` directly** (where all editing happens in place). Each card also carries

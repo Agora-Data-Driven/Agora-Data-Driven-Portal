@@ -153,6 +153,17 @@
       gap: 11px; text-align: center; box-shadow: var(--ax-shadow);
     }
     .ax-side-card .ax-clientlogo { width: 132px; max-width: 100%; }
+    /* Hover-to-upload crest: clicking anywhere on the logo opens the file picker (the <label> wraps a
+       hidden file input); a dim overlay with "Change logo" fades in on hover/focus. */
+    .ax-logo-up { position: relative; display: inline-block; max-width: 100%; cursor: pointer; border-radius: 12px; overflow: hidden; }
+    .ax-logo-up .ax-clientlogo { width: 132px; max-width: 100%; }
+    .ax-logo-ov {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(20,22,30,.52); opacity: 0; transition: opacity .15s;
+    }
+    .ax-logo-up:hover .ax-logo-ov, .ax-logo-up:focus-within .ax-logo-ov, .ax-logo-up.busy .ax-logo-ov { opacity: 1; }
+    .ax-logo-ovt { font-size: 11px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: #fff; padding: 0 8px; text-align: center; }
+    .ax-logo-up.busy { pointer-events: none; }
     .ax-side-card .ax-crest-text { display: flex; flex-direction: column; gap: 2px; }
     .ax-side-card .ax-name { font-size: 13.5px; font-weight: 800; letter-spacing: -.2px; }
     .ax-side-card .ax-sub {
@@ -963,7 +974,11 @@
       </nav>
 
       <div class="ax-side-card">
-        <span class="ax-clientlogo">{{ ws.brand.client_logo|safe }}</span>
+        <label class="ax-logo-up" data-logoup title="Upload or change your logo">
+          <span class="ax-clientlogo" data-clientlogo>{{ ws.brand.client_logo|safe }}</span>
+          <span class="ax-logo-ov" aria-hidden="true"><span class="ax-logo-ovt">Change logo</span></span>
+          <input type="file" data-logoinput accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" hidden>
+        </label>
         <div class="ax-crest-text">
           <div class="ax-name">{{ ws.display_name }}</div>
           <div class="ax-sub">{{ ws.tagline|default('Client workspace', true) }}</div>
@@ -1533,12 +1548,12 @@
                       <div class="ax-com-who">{{ cm.sender_name }}{% if cm.sender=='agora' %} · AGORA{% endif %}</div>
                       {{ cm.body }}
                       <div class="ax-com-when">{{ cm.created_at|atrium_dt }}</div>
-                      {% if cm.kind == 'changes' and cm.id %}
+                      {% if is_superadmin and cm.kind == 'changes' and cm.id %}
                       <div class="ax-com-resolve" data-comresolvewrap{% if cm.resolved %} hidden{% endif %}>
                         <button class="ax-btn ghost small" type="button" data-comresolve="{{ cm.id }}">{{ ic('check') }} Resolve</button>
                       </div>
                       {% endif %}
-                      {% if is_superadmin and is_org and cm.id %}
+                      {% if is_superadmin and cm.id %}
                       <div class="ax-com-del"><button class="ax-btn danger small" type="button" data-comdelete="{{ cm.id }}">Delete</button></div>
                       {% endif %}
                     </div>
@@ -2207,6 +2222,35 @@
       });
   }
 
+  // ---- Client crest: upload / change the workspace logo in place (any member, no reload) -------
+  // The side-panel logo is a <label> wrapping a hidden file input, so a click opens the picker. On a
+  // pick we POST the file to /logo and swap the returned <img> markup straight into the crest.
+  (function () {
+    var wrap = document.querySelector("[data-logoup]");
+    if (!wrap) { return; }
+    var input = wrap.querySelector("[data-logoinput]");
+    var holder = wrap.querySelector("[data-clientlogo]");
+    if (!input) { return; }
+    input.addEventListener("change", function () {
+      var file = input.files && input.files[0];
+      if (!file) { return; }
+      var fd = new FormData();
+      fd.append("logo", file);
+      wrap.classList.add("busy");
+      postData("/logo", fd)
+        .then(function (data) {
+          if (data && data.ok && data.logo && holder) { holder.innerHTML = data.logo; }
+          wrap.classList.remove("busy");
+          input.value = "";
+        })
+        .catch(function () {
+          wrap.classList.remove("busy");
+          input.value = "";
+          window.alert("Sorry, that logo could not be saved. Use a PNG, JPG, GIF, WEBP or SVG image under 512 KB.");
+        });
+    });
+  })();
+
   // ---- Content review: approve / save note ---------------------------------
   // (Requesting changes now lives in the comment thread — see the comment handler below.)
   qsa('[data-content]').forEach(function (card) {
@@ -2539,13 +2583,13 @@
       el.appendChild(who);
       el.appendChild(document.createTextNode(text));
       el.appendChild(when);
-      if (kind === "changes" && comId) {
+      if (isAdmin && kind === "changes" && comId) {
         var rw = document.createElement("div"); rw.className = "ax-com-resolve"; rw.setAttribute("data-comresolvewrap", "");
         var rb = document.createElement("button"); rb.className = "ax-btn ghost small"; rb.type = "button";
         rb.setAttribute("data-comresolve", comId); rb.textContent = "Resolve";
         rw.appendChild(rb); el.appendChild(rw); wireResolve(rb);
       }
-      if (isAdmin && comId && card && card.classList.contains("ax-collapse")) {
+      if (isAdmin && comId) {
         var dw = document.createElement("div"); dw.className = "ax-com-del";
         var db = document.createElement("button"); db.className = "ax-btn danger small"; db.type = "button";
         db.setAttribute("data-comdelete", comId); db.textContent = "Delete";
