@@ -326,20 +326,30 @@
     .ax-dot-i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: middle; }
 
     /* Campaign / strategy */
-    .ax-camphead { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+    /* Title on the left, the campaign switcher fixed on the right. */
+    .ax-camphead { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 14px; margin-bottom: 16px; }
     .ax-camphead h2 { font-size: 20px; font-weight: 800; margin: 4px 0 0; letter-spacing: -.4px; }
+    @media (max-width: 820px) { .ax-camphead { grid-template-columns: 1fr; } }
+    /* "All Campaigns" list — one clickable card per campaign (name only), drills into the full view. */
+    .ax-camplist { display: flex; flex-direction: column; gap: 12px; }
+    .ax-camplist-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; text-align: left; padding: 18px 20px; background: var(--ax-white); border: 1px solid var(--ax-line); border-radius: var(--ax-radius); box-shadow: var(--ax-shadow); cursor: pointer; transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease; }
+    .ax-camplist-card:hover { border-color: var(--ax-violet); box-shadow: 0 6px 18px rgba(92,75,208,.14); transform: translateY(-1px); }
+    .ax-camplist-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .ax-camplist-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ax-green-d); }
+    .ax-camplist-name { font-size: 17px; font-weight: 800; letter-spacing: -.3px; color: var(--ax-ink); }
+    .ax-camplist-meta { font-size: 12.5px; font-weight: 700; color: var(--ax-sub); }
+    .ax-camplist-arrow { flex: none; display: inline-flex; color: var(--ax-violet); }
+    .ax-camplist-arrow .ax-ic { width: 20px; height: 20px; }
     .ax-select { font: inherit; font-size: 13px; font-weight: 700; color: var(--ax-ink); padding: 9px 32px 9px 12px; border: 1px solid var(--ax-violet); border-radius: 10px; background: var(--ax-white); cursor: pointer; box-shadow: 0 1px 2px rgba(92,75,208,.12); }
     .ax-select:hover { background: var(--ax-violet-bg); }
-    /* Campaign switcher (so the client knows the dropdown views specific campaigns) */
-    .ax-campswitch { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-    /* The label sits INSIDE the dropdown box: the wrapper carries the border/shadow, the select goes borderless. */
-    .ax-campbox { display: inline-flex; align-items: center; gap: 8px; padding-left: 12px; border: 1px solid var(--ax-violet); border-radius: 10px; background: var(--ax-white); box-shadow: 0 1px 2px rgba(92,75,208,.12); }
+    /* Campaign switcher: a centred column — tiny "Viewing campaign" label, then a fixed-size dropdown. */
+    .ax-campswitch { grid-column: 2; justify-self: end; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+    .ax-campbox { display: flex; align-items: center; width: 320px; max-width: 100%; border: 1px solid var(--ax-violet); border-radius: 10px; background: var(--ax-white); box-shadow: 0 1px 2px rgba(92,75,208,.12); }
     .ax-campbox:hover { background: var(--ax-violet-bg); }
-    .ax-campbox .ax-select { border: none; border-radius: 0; background: transparent; box-shadow: none; padding-left: 0; }
+    .ax-campbox .ax-select { flex: 1; width: 100%; border: none; border-radius: 10px; background: transparent; box-shadow: none; }
     .ax-campbox .ax-select:hover { background: transparent; }
-    .ax-campswitch-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ax-violet-d); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-    .ax-campswitch-label .ax-ic { width: 15px; height: 15px; }
-    .ax-campswitch-hint { font-size: 12px; color: var(--ax-sub); width: 100%; text-align: right; }
+    .ax-campswitch-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ax-violet-d); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; padding-left: 2px; }
+    .ax-campswitch-label .ax-ic { width: 13px; height: 13px; }
     .ax-strategy { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; padding: 0; overflow: hidden; }
     @media (max-width: 820px) { .ax-strategy { grid-template-columns: 1fr; } }
     .ax-strat-col { padding: 18px; border-left: 1px solid var(--ax-line); }
@@ -1147,21 +1157,37 @@
           {% if camps %}
           <div class="ax-camphead">
             <div>
-              <span class="ax-eyebrow">{{ camps[0].eyebrow }}</span>
+              <span class="ax-eyebrow" data-campeyebrow="{{ tab }}">{{ camps[0].eyebrow }}</span>
               <h2 data-camptitle="{{ tab }}">{{ camps[0].name }}</h2>
             </div>
             {% if camps|length > 1 %}
             <div class="ax-campswitch">
+              <span class="ax-campswitch-label">{{ ic('arrow') }} Viewing campaign</span>
               <div class="ax-campbox">
-                <span class="ax-campswitch-label">{{ ic('arrow') }} Viewing campaign</span>
                 <select class="ax-select" data-campfilter="{{ tab }}" aria-label="Switch to view a specific campaign">
-                  {% for c in camps %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+                  <option value="__all__">All Campaigns</option>
+                  {% for c in camps %}<option value="{{ c.id }}" {% if loop.first %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
                 </select>
               </div>
-              <span class="ax-campswitch-hint">You have {{ camps|length }} campaigns. Switch to view another.</span>
             </div>
             {% endif %}
           </div>
+
+          {% if camps|length > 1 %}
+          <!-- "All Campaigns" view: a list of campaign cards; clicking one opens that campaign in full. -->
+          <div class="ax-camplist" data-camplist="{{ tab }}" style="display:none">
+            {% for c in camps %}
+            <button class="ax-camplist-card" type="button" data-campgoto="{{ tab }}" data-campid="{{ c.id }}">
+              <span class="ax-camplist-text">
+                {% if c.eyebrow %}<span class="ax-camplist-eyebrow">{{ c.eyebrow }}</span>{% endif %}
+                <span class="ax-camplist-name">{{ c.name }}</span>
+                <span class="ax-camplist-meta">{{ c.content|length }} content piece{{ '' if c.content|length == 1 else 's' }}</span>
+              </span>
+              <span class="ax-camplist-arrow">{{ ic('arrow') }}</span>
+            </button>
+            {% endfor %}
+          </div>
+          {% endif %}
 
           {% for c in camps %}
           <div data-campblock="{{ tab }}" data-campid="{{ c.id }}" data-campname="{{ c.name }}" data-eyebrow="{{ c.eyebrow }}" {% if not loop.first %}style="display:none"{% endif %}>
@@ -2086,24 +2112,43 @@
     if (typeSel) { typeSel.addEventListener("change", function () { typeWant = typeSel.value; apply(); }); }
   });
 
-  // ---- Campaign dropdown (when a channel has >1 campaign) ------------------
+  // ---- Campaign switcher (when a channel has >1 campaign) ------------------
+  // "All Campaigns" shows a list of campaign cards (name only); picking a specific campaign — from
+  // the dropdown OR by clicking a card — opens that campaign in full and hides the list.
+  function showCampaign(tab, id) {
+    var showAll = id === "__all__";
+    var chosen = null;
+    qsa('[data-campblock="' + aq(tab) + '"]').forEach(function (b) {
+      var match = !showAll && b.getAttribute("data-campid") === id;
+      b.style.display = match ? "" : "none";
+      if (match) { chosen = b; }
+    });
+    var list = document.querySelector('[data-camplist="' + aq(tab) + '"]');
+    if (list) { list.style.display = showAll ? "" : "none"; }
+    // Delete acts on the single viewed campaign, so hide it while viewing the list.
+    qsa('[data-campdel="' + aq(tab) + '"]').forEach(function (b) {
+      b.style.display = (!showAll && b.getAttribute("data-campid") === id) ? "" : "none";
+    });
+    var title = document.querySelector('[data-camptitle="' + aq(tab) + '"]');
+    var eb = document.querySelector('[data-campeyebrow="' + aq(tab) + '"]');
+    if (showAll) {
+      if (title) { title.textContent = "All Campaigns"; }
+      if (eb) { eb.textContent = ""; }
+    } else if (chosen) {
+      if (title) { title.textContent = chosen.getAttribute("data-campname"); }
+      if (eb) { eb.textContent = chosen.getAttribute("data-eyebrow"); }
+    }
+    var sel = document.querySelector('[data-campfilter="' + aq(tab) + '"]');
+    if (sel && sel.value !== id) { sel.value = id; }
+  }
+
   qsa("[data-campfilter]").forEach(function (sel) {
     var tab = sel.getAttribute("data-campfilter");
-    sel.addEventListener("change", function () {
-      var id = sel.value;
-      var chosen = null;
-      qsa('[data-campblock="' + aq(tab) + '"]').forEach(function (b) {
-        var match = b.getAttribute("data-campid") === id;
-        b.style.display = match ? "" : "none";
-        if (match) { chosen = b; }
-      });
-      qsa('[data-campdel="' + aq(tab) + '"]').forEach(function (b) {
-        b.style.display = (b.getAttribute("data-campid") === id) ? "" : "none";
-      });
-      if (chosen) {
-        var title = document.querySelector('[data-camptitle="' + aq(tab) + '"]');
-        if (title) { title.textContent = chosen.getAttribute("data-campname"); }
-      }
+    sel.addEventListener("change", function () { showCampaign(tab, sel.value); });
+  });
+  qsa("[data-campgoto]").forEach(function (card) {
+    card.addEventListener("click", function () {
+      showCampaign(card.getAttribute("data-campgoto"), card.getAttribute("data-campid"));
     });
   });
 
@@ -2116,17 +2161,7 @@
     var id = m[1];
     var block = document.querySelector('[data-campblock][data-campid="' + aq(id) + '"]');
     if (!block) { return; }
-    var tab = block.getAttribute("data-campblock");
-    qsa('[data-campblock="' + aq(tab) + '"]').forEach(function (b) {
-      b.style.display = (b.getAttribute("data-campid") === id) ? "" : "none";
-    });
-    qsa('[data-campdel="' + aq(tab) + '"]').forEach(function (b) {
-      b.style.display = (b.getAttribute("data-campid") === id) ? "" : "none";
-    });
-    var title = document.querySelector('[data-camptitle="' + aq(tab) + '"]');
-    if (title) { title.textContent = block.getAttribute("data-campname"); }
-    var sel = document.querySelector('[data-campfilter="' + aq(tab) + '"]');
-    if (sel) { sel.value = id; }
+    showCampaign(block.getAttribute("data-campblock"), id);
   })();
 
   // ---- Conversations: thread switch + send --------------------------------
