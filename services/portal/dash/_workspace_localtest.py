@@ -120,6 +120,40 @@ def run():
     workspace.delete_calendar_event(CLIENT, before_cal)
     _check("calendar event deleted", len(workspace.load_workspace(CLIENT)["calendar"]) == before_cal)
 
+    # 8f. Content with a date mirrors onto the Content Calendar as a linked event; editing the date
+    #     re-syncs it (paid -> 'paid'/leadgen); clearing the date removes it; deleting the piece too.
+    base_cal = len(workspace.load_workspace(CLIENT).get("calendar", []))
+    dated = workspace.add_content(CLIENT, "c_paid_1",
+                                  {"ref": "Dated teaser", "date": "2026-08-01"})
+    linked = [e for e in workspace.load_workspace(CLIENT)["calendar"]
+              if e.get("content_id") == dated["id"]]
+    _check("dated content mirrored to calendar", len(linked) == 1)
+    _check("linked event is paid/leadgen",
+           linked and linked[0]["kind"] == "paid" and linked[0]["tab"] == "leadgen")
+    _check("linked event carries the date + label",
+           linked and linked[0]["date"] == "2026-08-01" and linked[0]["label"] == "Dated teaser")
+    workspace.update_content(CLIENT, dated["id"], {"date": "2026-08-15", "ref": "Renamed teaser"})
+    relinked = [e for e in workspace.load_workspace(CLIENT)["calendar"]
+                if e.get("content_id") == dated["id"]]
+    _check("edit re-synced the linked event (no duplicate)", len(relinked) == 1)
+    _check("edit overwrote date + label on the event",
+           relinked and relinked[0]["date"] == "2026-08-15" and relinked[0]["label"] == "Renamed teaser")
+    workspace.update_content(CLIENT, dated["id"], {"date": ""})
+    _check("clearing the date removes the linked event",
+           not [e for e in workspace.load_workspace(CLIENT)["calendar"]
+                if e.get("content_id") == dated["id"]])
+    # A piece WITHOUT a date never touches the calendar.
+    undated = workspace.add_content(CLIENT, "c_paid_1", {"ref": "No date"})
+    _check("undated content adds no calendar event",
+           len(workspace.load_workspace(CLIENT)["calendar"]) == base_cal)
+    # Re-date it, then delete the piece: the linked event goes with it.
+    workspace.update_content(CLIENT, undated["id"], {"date": "2026-09-09"})
+    _check("re-dating creates the linked event",
+           len(workspace.load_workspace(CLIENT)["calendar"]) == base_cal + 1)
+    workspace.delete_content(CLIENT, undated["id"])
+    _check("deleting the piece removes its linked event",
+           len(workspace.load_workspace(CLIENT)["calendar"]) == base_cal)
+
     # 9. Everything survived a reload from disk.
     reloaded = workspace.load_workspace(CLIENT)
     _camp, rvr016 = workspace._find_content(reloaded, "RVR-016")

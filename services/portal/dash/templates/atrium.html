@@ -36,15 +36,42 @@
 {%- elif name == 'target' -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.6"/></svg>
 {%- elif name == 'menu' -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3.5" y1="6" x2="20.5" y2="6"/><line x1="3.5" y1="12" x2="20.5" y2="12"/><line x1="3.5" y1="18" x2="20.5" y2="18"/></svg>
 {%- elif name == 'file' -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h8L19 7v14.5H6z"/><path d="M14 2.5V7h4"/></svg>
+{%- elif name == 'download' -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 20.5h14"/></svg>
 {%- else -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/></svg>
 {%- endif -%}
 {%- endmacro %}
-{#- Render ONE attached file (`s` = {url, mime, id, name}) inside a slide: image -> zoomable <img>,
-   video -> playable thumb, anything else -> a download chip. Used by every carousel/shot row. -#}
+{#- A self-contained file-type icon: a document sheet with a folded corner and a colored band
+   carrying the format label (PDF / DOC / XLS / CSV / PPT / TXT). No external images. -#}
+{% macro doc_icon(label, color) -%}
+<svg class="ax-doc-svg" viewBox="0 0 48 60" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 2.5h25L41 11v44.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4.5a2 2 0 0 1 2-2z" fill="#fff" stroke="#D6DAE3" stroke-width="1.5"/><path d="M32 2.5V11h9" fill="#EEF0F4" stroke="#D6DAE3" stroke-width="1.5" stroke-linejoin="round"/><line x1="11" y1="17" x2="29" y2="17" stroke="#E3E6EC" stroke-width="2" stroke-linecap="round"/><line x1="11" y1="22.5" x2="34" y2="22.5" stroke="#E3E6EC" stroke-width="2" stroke-linecap="round"/><rect x="3" y="30" width="42" height="15.5" rx="2.5" fill="{{ color }}"/><text x="24" y="41.4" text-anchor="middle" font-family="Inter, system-ui, Arial, sans-serif" font-size="9" font-weight="800" fill="#fff" letter-spacing=".4">{{ label }}</text></svg>
+{%- endmacro %}
+{#- Render ONE attached file (`s` = {url, mime, id, name}) inside a slide. Classified by mime AND
+   filename extension (uploads sometimes arrive with an empty mime): video -> playable thumb;
+   document (pdf/docx/xlsx/pptx/csv/txt) -> live mini-preview that opens a scrollable doc lightbox
+   with a download button; image -> zoomable <img>; anything else -> a download chip. -#}
 {% macro shot_media(s, alt) -%}
-{%- if s.mime.startswith('video/') -%}<button type="button" class="ax-shot-media ax-vidthumb" data-playvideo="{{ s.url }}" aria-label="Play video"><video class="ax-vidthumb-v" src="{{ s.url }}" muted preload="metadata"></video><span class="ax-ch-play" aria-hidden="true">▶</span></button>
-{%- elif s.mime.startswith('image/') or not s.mime -%}<img class="ax-shot-media" data-shot data-shot-src="{{ s.url }}" src="{{ s.url }}" alt="{{ alt }}">
-{%- else -%}<a class="ax-shot-media ax-shot-file" href="{{ s.url }}" target="_blank" rel="noopener noreferrer" download title="Download {{ s.name or 'file' }}">{{ ic('file') }}<span class="ax-shot-file-name">{{ s.name or 'Download file' }}</span></a>
+{%- set _name = (s.name or '')|lower -%}
+{%- set _m = (s.mime or '')|lower -%}
+{%- set _ext_img = _name.endswith('.png') or _name.endswith('.jpg') or _name.endswith('.jpeg') or _name.endswith('.gif') or _name.endswith('.webp') or _name.endswith('.svg') -%}
+{%- set _is_pdf = (_m == 'application/pdf') or _name.endswith('.pdf') -%}
+{%- set _is_office = _name.endswith('.docx') or _name.endswith('.doc') or _name.endswith('.xlsx') or _name.endswith('.xls') or _name.endswith('.csv') or _name.endswith('.pptx') or _name.endswith('.ppt') or _name.endswith('.txt') or ('word' in _m) or ('excel' in _m) or ('spreadsheet' in _m) or ('officedocument' in _m) or ('presentation' in _m) or ('powerpoint' in _m) or ('csv' in _m) or (_m == 'text/plain') -%}
+{%- set _is_doc = _is_pdf or _is_office -%}
+{%- set _is_video = _m.startswith('video/') -%}
+{%- set _is_image = _m.startswith('image/') or (not _m and (not _name or _ext_img)) -%}
+{%- if _is_video -%}<button type="button" class="ax-shot-media ax-vidthumb" data-playvideo="{{ s.url }}" aria-label="Play video"><video class="ax-vidthumb-v" src="{{ s.url }}" muted preload="metadata"></video><span class="ax-ch-play" aria-hidden="true">▶</span></button>
+{%- elif _is_doc -%}
+{%- set _dl = s.url ~ '?dl=1' -%}
+{%- if _is_pdf -%}{%- set _prev = s.url ~ '#toolbar=0&navpanes=0&view=FitH' -%}{%- set _kind = 'pdf' -%}{%- set _flabel = 'PDF' -%}{%- set _fcol = '#E5413E' -%}
+{%- else -%}{%- set _prev = s.url|replace('/creative/', '/docview/') -%}{%- set _kind = 'office' -%}
+{%- if _name.endswith('.xlsx') or _name.endswith('.xls') or ('excel' in _m) or ('spreadsheet' in _m) -%}{%- set _flabel = 'XLS' -%}{%- set _fcol = '#217346' -%}
+{%- elif _name.endswith('.csv') or ('csv' in _m) -%}{%- set _flabel = 'CSV' -%}{%- set _fcol = '#217346' -%}
+{%- elif _name.endswith('.pptx') or _name.endswith('.ppt') or ('presentation' in _m) or ('powerpoint' in _m) -%}{%- set _flabel = 'PPT' -%}{%- set _fcol = '#C43E1C' -%}
+{%- elif _name.endswith('.txt') or (_m == 'text/plain') -%}{%- set _flabel = 'TXT' -%}{%- set _fcol = '#5C6470' -%}
+{%- else -%}{%- set _flabel = 'DOC' -%}{%- set _fcol = '#2B579A' -%}{%- endif -%}
+{%- endif -%}
+<button type="button" class="ax-shot-media ax-shot-doc" data-doc="1" data-doc-preview="{{ _prev }}" data-doc-download="{{ _dl }}" data-doc-name="{{ s.name or 'Document' }}" data-doc-kind="{{ _kind }}" aria-label="Preview {{ s.name or 'document' }}">{{ doc_icon(_flabel, _fcol) }}<span class="ax-doc-name">{{ s.name or 'Document' }}</span></button>
+{%- elif _is_image -%}<img class="ax-shot-media" data-shot data-shot-src="{{ s.url }}" src="{{ s.url }}" alt="{{ alt }}">
+{%- else -%}<a class="ax-shot-media ax-shot-file" href="{{ s.url }}?dl=1" target="_blank" rel="noopener noreferrer" download title="Download {{ s.name or 'file' }}">{{ ic('file') }}<span class="ax-shot-file-name">{{ s.name or 'Download file' }}</span></a>
 {%- endif -%}
 {%- endmacro %}
 {% set tab_titles = {'overview':'Overview','dashboard':'Dashboard','leadgen':'Lead Generation','organic':'Organic Content','calendar':'Content Calendar','conversations':'Client Communications','settings':'Notification settings'} %}
@@ -357,6 +384,27 @@
     .ax-campbox .ax-select:hover { background: transparent; }
     .ax-campswitch-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ax-violet-d); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; padding-left: 2px; }
     .ax-campswitch-label .ax-ic { width: 13px; height: 13px; }
+    /* Header controls row: campaign switcher + cross-campaign type filter, side by side. */
+    .ax-headctrls { grid-column: 2; justify-self: end; display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+    .ax-headctrls .ax-campswitch { grid-column: auto; justify-self: auto; }
+    .ax-campbox.is-type { width: 200px; }
+    @media (max-width: 820px) { .ax-headctrls { grid-column: 1; justify-self: stretch; } .ax-headctrls .ax-campswitch, .ax-campbox, .ax-campbox.is-type { width: 100%; } }
+    /* Cross-campaign "Filter by type" view: each campaign block collapses to just its matching
+       content cards, headed by the campaign marker so the client sees where each piece belongs. */
+    .ax-camptypehead { display: none; }
+    .ax-typeview > .ax-camptypehead {
+      display: flex; flex-direction: column; gap: 2px; margin: 0 0 12px;
+      padding: 10px 14px; border-left: 4px solid var(--ax-green);
+      background: var(--ax-green-bg); border-radius: 10px;
+    }
+    .ax-cth-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ax-green-d); }
+    .ax-cth-name { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 800; letter-spacing: -.3px; color: var(--ax-ink); }
+    .ax-cth-name .ax-ic { width: 15px; height: 15px; color: var(--ax-green-d); }
+    .ax-typeview > .ax-breakdown,
+    .ax-typeview > .ax-strategy,
+    .ax-typeview > .ax-admin-tools,
+    .ax-typeview > .ax-edit-hidden,
+    .ax-typeview > [data-contentfilter] { display: none !important; }
     .ax-strategy { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; padding: 0; overflow: hidden; }
     @media (max-width: 820px) { .ax-strategy { grid-template-columns: 1fr; } }
     .ax-strat-col { padding: 18px; border-left: 1px solid var(--ax-line); }
@@ -438,8 +486,33 @@
     .ax-shot-file:hover { background: #ecebf8; }
     .ax-shot-file .ax-ic { width: 30px; height: 30px; }
     .ax-shot-file-name { font-size: 12px; font-weight: 600; line-height: 1.3; word-break: break-word; max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    /* Document attachment (pdf/docx/xlsx/…): a clean file-type icon (format depends on the file) +
+       filename; click to enlarge into the scrollable doc lightbox. */
+    .ax-shot-doc { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                   gap: 9px; width: 100%; height: 100%; min-height: 104px; padding: 12px; border: 0; background: #f3f4f7;
+                   cursor: zoom-in; overflow: hidden; text-align: center; transition: background .12s ease; }
+    .ax-shots:not(.multi) .ax-shot-doc { min-height: 210px; }
+    .ax-doc-svg { width: auto; height: 96px; max-height: 56%; display: block; filter: drop-shadow(0 5px 12px rgba(16,24,40,.16)); transition: transform .12s ease; }
+    .ax-doc-name { font-size: 12px; font-weight: 700; color: #3a4050; line-height: 1.25; max-width: 100%;
+                   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+    .ax-shot-doc:hover { background: #ebedf2; }
+    .ax-shot-doc:hover .ax-doc-svg { transform: translateY(-1px); }
+    /* Doc lightbox: full-height scrollable viewer with a top bar carrying a transparent download button. */
+    .ax-doclightbox { padding: 0; grid-template-rows: auto 1fr; place-items: stretch; }
+    .ax-doclb-bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+    .ax-doclb-name { color: #fff; font-size: 14px; font-weight: 700; margin-right: auto;
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
+    .ax-doclb-dl, .ax-doclb-x { width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(255,255,255,.14);
+                                color: #fff; display: grid; place-items: center; cursor: pointer; text-decoration: none; }
+    .ax-doclb-dl:hover, .ax-doclb-x:hover { background: rgba(255,255,255,.28); }
+    .ax-doclb-dl .ax-ic { width: 20px; height: 20px; }
+    .ax-doclb-x { font-size: 24px; line-height: 1; }
+    .ax-doclb-frame { width: 100%; height: 100%; border: 0; background: #fff; }
     /* Organic content: collapsible dropdown card (brand-kit themed) */
     .ax-content.ax-collapse { display: block; padding: 0; overflow: hidden; }
+    /* Brief highlight when a calendar "go to content" arrow scrolls a card into view */
+    @keyframes ax-flash { 0% { box-shadow: 0 0 0 3px var(--ax-violet); } 100% { box-shadow: 0 0 0 0 transparent; } }
+    .ax-flash { animation: ax-flash 1.7s ease-out; }
     .ax-cardhead { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; width: 100%; padding: 12px 16px; }
     .ax-ch-media { min-width: 0; }
     .ax-cardhead-toggle { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; width: 100%; min-width: 0; text-align: left; background: none; border: 0; cursor: pointer; padding: 0; font: inherit; color: inherit; }
@@ -520,6 +593,10 @@
     .ax-cal-cell.pastempty .ax-cal-day { color: var(--ax-green-d); opacity: .75; }
     .ax-cal-cell.done { background: var(--ax-green-bg); border-color: #cdeccf; }
     .ax-cal-cell.ahead { background: var(--ax-green-bg); border-color: var(--ax-green); box-shadow: 0 0 0 1px var(--ax-green) inset; }
+    /* Overdue (content past its date, never marked done): red. Listed AFTER done/ahead so it wins. */
+    .ax-cal-cell.overdue { background: #FDECEC; border-color: #F3B4B2; box-shadow: 0 0 0 1px #E5413E inset; color: #C0322F; }
+    .ax-cal-cell.overdue .ax-cal-day { color: #C0322F; }
+    .ax-cal-late { color: #E5413E; font-weight: 900; }
     .ax-cal-cell.past .ax-cal-day { color: #98a0b0; }
     .ax-cal-check { color: var(--ax-green-d); font-weight: 900; }
     /* Three-month stack: previous / current / next, current emphasised, neighbours compact. */
@@ -549,6 +626,13 @@
     .ax-caldlg-lab { flex: 1 1 100%; font-size: 14px; font-weight: 700; color: var(--ax-ink); }
     .ax-caldlg-row .ax-cdlg-kind { flex: 0 0 auto; padding: 6px 9px; font-size: 12.5px; font-weight: 700; color: var(--ax-ink); border: 1px solid var(--ax-line); border-radius: 8px; background: var(--ax-white); cursor: pointer; }
     .ax-caldlg-empty { color: var(--ax-sub); font-size: 13.5px; padding: 2px 0 10px; }
+    /* "Came from" source tag + jump-to-content arrow on a linked content event in the day popup */
+    .ax-caldlg-src { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; font-size: 11px; font-weight: 800; border-radius: 999px; }
+    .ax-caldlg-src.paid { color: var(--ax-violet-d); background: var(--ax-violet-bg); }
+    .ax-caldlg-src.organic { color: var(--ax-green-d); background: var(--ax-green-bg); }
+    .ax-caldlg-goto { flex: 0 0 auto; display: inline-grid; place-items: center; width: 30px; height: 30px; font-size: 16px; font-weight: 900; color: var(--ax-violet-d); background: var(--ax-violet-bg); border: 0; border-radius: 8px; cursor: pointer; transition: background .12s; }
+    .ax-caldlg-goto:hover { background: #E4DEFF; }
+    .ax-caldlg-row.late .ax-caldlg-lab { color: #C0322F; }
     .ax-caldlg-add { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--ax-line); }
     .ax-caldlg-addhd { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--ax-sub); margin-bottom: 9px; }
     .ax-caldlg-addrow { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
@@ -578,6 +662,7 @@
     .ax-hist-status.done { color: var(--ax-green-d); background: var(--ax-green-bg); }
     .ax-hist-status.today { color: var(--ax-violet-d); background: var(--ax-violet-bg); }
     .ax-hist-status.upcoming { color: var(--ax-sub); background: var(--ax-canvas); }
+    .ax-hist-status.overdue { color: #E5413E; background: #FDECEC; }
     /* Project progress header */
     .ax-progress { padding: 16px 20px; margin-bottom: 16px; }
     .ax-progress-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -593,6 +678,7 @@
     .ax-callayout { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start; }
     @media (max-width: 980px) { .ax-callayout { grid-template-columns: 1fr; } }
     .ax-mile-aheadkey { color: var(--ax-green-d); font-weight: 700; }
+    .ax-mile-latekey { color: #E5413E; font-weight: 700; }
     .ax-mile-list { position: relative; }
     .ax-mile { display: flex; gap: 12px; padding-bottom: 18px; position: relative; }
     .ax-mile:not(:last-child)::before { content: ""; position: absolute; left: 12px; top: 27px; bottom: 0; width: 2px; background: var(--ax-line); }
@@ -600,6 +686,8 @@
     .ax-mile-ic .ax-ic { width: 15px; height: 15px; }
     .ax-mile.done .ax-mile-ic { background: var(--ax-green); border-color: var(--ax-green); color: #fff; }
     .ax-mile.today .ax-mile-ic { border-color: var(--ax-green); color: var(--ax-green-d); box-shadow: 0 0 0 3px var(--ax-green-bg); }
+    .ax-mile.overdue .ax-mile-ic { border-color: #E5413E; color: #E5413E; box-shadow: 0 0 0 3px #FDECEC; }
+    .ax-mile.overdue .ax-mile-date { color: #E5413E; }
     .ax-mile-ic.paid.upcoming { border-color: var(--ax-violet); }
     .ax-mile-ic.organic.upcoming { border-color: var(--ax-green); }
     .ax-mile-ic.due.upcoming { border-color: var(--ax-warn); }
@@ -785,6 +873,11 @@
     /* Add-content modal: attach pictures at creation time. */
     .ax-newpics { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
     .ax-newpics-status { font-size: 12px; font-weight: 700; color: var(--ax-green-d); }
+    .ax-newdate { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 10px 0; }
+    .ax-newdate-lab { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; color: var(--ax-ink); }
+    .ax-newdate-lab .ax-ic { width: 15px; height: 15px; }
+    .ax-newdate .ax-editbox { margin: 0; width: auto; flex: 0 0 auto; }
+    .ax-newdate-hint { font-size: 11.5px; color: var(--ax-sub); }
     /* Admin: pane toolbar + add-content/add-campaign popup + content-type filter */
     .ax-pane-tools { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 12px; }
     .ax-typefilter { margin-left: auto; }
@@ -1187,13 +1280,29 @@
               <h2 data-camptitle="{{ tab }}">{{ camps[0].name }}</h2>
             </div>
             {% if camps|length > 1 %}
-            <div class="ax-campswitch">
-              <span class="ax-campswitch-label">{{ ic('arrow') }} Viewing campaign</span>
-              <div class="ax-campbox">
-                <select class="ax-select" data-campfilter="{{ tab }}" aria-label="Switch to view a specific campaign">
-                  <option value="__all__">All Campaigns</option>
-                  {% for c in camps %}<option value="{{ c.id }}" {% if loop.first %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
-                </select>
+            <div class="ax-headctrls">
+              <div class="ax-campswitch">
+                <span class="ax-campswitch-label">{{ ic('arrow') }} Viewing campaign</span>
+                <div class="ax-campbox">
+                  <select class="ax-select" data-campfilter="{{ tab }}" aria-label="Switch to view a specific campaign">
+                    <option value="__all__">All Campaigns</option>
+                    {% for c in camps %}<option value="{{ c.id }}" {% if loop.first %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                  </select>
+                </div>
+              </div>
+              {# Cross-campaign content-type filter: pick a type and every campaign collapses to just
+                 its matching pieces, each headed by its campaign marker (see .ax-typeview JS/CSS). #}
+              {% set type_opts = ['Blog Post','Static Post','Quizzes','Email','Newsletter','Video Edit'] %}
+              {% set used_types = camps|map(attribute='content')|sum(start=[])|map(attribute='type_tag')|select|unique|list %}
+              <div class="ax-campswitch">
+                <span class="ax-campswitch-label">{{ ic('tag') }} Filter by type</span>
+                <div class="ax-campbox is-type">
+                  <select class="ax-select" data-globaltypefilter="{{ tab }}" aria-label="Show one content type across every campaign">
+                    <option value="all">All types</option>
+                    {% for t in type_opts %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+                    {% for t in used_types if t not in type_opts %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+                  </select>
+                </div>
               </div>
             </div>
             {% endif %}
@@ -1217,6 +1326,12 @@
 
           {% for c in camps %}
           <div data-campblock="{{ tab }}" data-campid="{{ c.id }}" data-campname="{{ c.name }}" data-eyebrow="{{ c.eyebrow }}" {% if not loop.first %}style="display:none"{% endif %}>
+            {# Campaign marker — only visible while a cross-campaign type filter is active, so the
+               client can see which campaign each surfaced piece belongs to. #}
+            <div class="ax-camptypehead" aria-hidden="true">
+              {% if c.eyebrow %}<span class="ax-cth-eyebrow">{{ c.eyebrow }}</span>{% endif %}
+              <span class="ax-cth-name">{{ ic('arrow') }} {{ c.name }}</span>
+            </div>
             {% if c.strategy_doc %}
             <a class="ax-breakdown" href="{{ c.strategy_doc }}" target="_blank" rel="noopener noreferrer">
               {{ ic('doc') }}<span>View the full breakdown</span><span class="ax-bd-arrow">{{ ic('arrow') }}</span>
@@ -1460,6 +1575,11 @@
                     </select>
                   </div>
                   <textarea class="ax-editbox" data-cf="caption" placeholder="Description">{{ p.caption }}</textarea>
+                  <div class="ax-newdate">
+                    <span class="ax-newdate-lab">{{ ic('calendar') }} Publish date (optional)</span>
+                    <input class="ax-editbox" type="date" data-cf="date" value="{{ p.date|default('', true) }}" aria-label="Publish date">
+                    <span class="ax-newdate-hint">Shows on the Content Calendar; clear it to remove.</span>
+                  </div>
                   <div class="ax-actions">
                     <button class="ax-btn violet small" type="button" data-contentsave="{{ p.id }}">Save details</button>
                     <button class="ax-btn ghost small" type="button" data-contentcancel="{{ p.id }}">Cancel</button>
@@ -1501,6 +1621,11 @@
               </div>
               <textarea class="ax-editbox" data-nc="caption" placeholder="Description the client will review…"></textarea>
               <input class="ax-editbox" data-nc="video_url" placeholder="Video link (optional) — paste an .mp4 or YouTube/Vimeo URL">
+              <div class="ax-newdate">
+                <span class="ax-newdate-lab">{{ ic('calendar') }} Publish date (optional)</span>
+                <input class="ax-editbox" type="date" data-nc="date" aria-label="Publish date">
+                <span class="ax-newdate-hint">Add a date and it shows on the Content Calendar.</span>
+              </div>
               <div class="ax-newpics">
                 <button class="ax-btn ghost small" type="button" data-newcontentpick="{{ c.id }}">＋ Attached Files</button>
                 <input type="file" multiple data-newcontentinput="{{ c.id }}" style="display:none">
@@ -1565,6 +1690,7 @@
             <span><span class="ax-dot-i" style="background:#4FAB4A"></span>Organic</span>
             <span><span class="ax-dot-i" style="background:#F2820C"></span>Due</span>
             <span class="ax-mile-aheadkey">✓ done / ahead of schedule</span>
+            <span class="ax-mile-latekey">! past due — mark as done</span>
           </div>
 
           <div class="ax-callayout">
@@ -1581,8 +1707,8 @@
                   {% for d in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] %}<div class="ax-cal-dow">{{ d }}</div>{% endfor %}
                   {% for week in cal.weeks %}{% for cell in week %}
                   {% set cell_emptypast = cell.is_past and cell.in_month and not cell.events and not cell.done and not cell.ahead and not cell.is_today %}
-                  <div class="ax-cal-cell {{ 'out' if not cell.in_month else '' }} {{ 'past' if cell.is_past else '' }} {{ 'pastempty' if cell_emptypast else '' }} {{ 'done' if cell.done else '' }} {{ 'ahead' if cell.ahead else '' }} {{ 'today' if cell.is_today else '' }}{{ ' ax-cal-edit' if (is_superadmin and cell.in_month) else '' }}"{% if is_superadmin and cell.in_month %} data-cal-day="{{ cell.iso }}" role="button" tabindex="0"{% endif %}>
-                    <div class="ax-cal-day">{{ cell.day }}{% if cell.done %} <span class="ax-cal-check">✓</span>{% endif %}</div>
+                  <div class="ax-cal-cell {{ 'out' if not cell.in_month else '' }} {{ 'past' if cell.is_past else '' }} {{ 'pastempty' if cell_emptypast else '' }} {{ 'done' if cell.done else '' }} {{ 'overdue' if cell.overdue else '' }} {{ 'ahead' if cell.ahead else '' }} {{ 'today' if cell.is_today else '' }}{{ ' ax-cal-edit' if (is_superadmin and cell.in_month) else '' }}"{% if is_superadmin and cell.in_month %} data-cal-day="{{ cell.iso }}" role="button" tabindex="0"{% endif %}>
+                    <div class="ax-cal-day">{{ cell.day }}{% if cell.done %} <span class="ax-cal-check">✓</span>{% elif cell.overdue %} <span class="ax-cal-late">!</span>{% endif %}</div>
                     {% for ev in cell.events %}
                     <div class="ax-cal-ev"><span class="ax-evd {{ ev.kind }}"></span><span>{{ ev.label }}</span></div>
                     {% endfor %}
@@ -1830,6 +1956,16 @@
 <div class="ax-lightbox ax-vlightbox" id="ax-vlightbox" hidden>
   <button class="ax-lightbox-close" id="ax-vlb-x" type="button" aria-label="Close">&times;</button>
   <video class="ax-vlightbox-v" id="ax-vlb-v" controls playsinline preload="metadata"></video>
+</div>
+
+<!-- Document lightbox: clicking a doc preview opens it large + scrollable, with a download button. -->
+<div class="ax-lightbox ax-doclightbox" id="ax-doclightbox" hidden>
+  <div class="ax-doclb-bar">
+    <span class="ax-doclb-name" id="ax-doclb-name"></span>
+    <a class="ax-doclb-dl" id="ax-doclb-dl" download title="Download" aria-label="Download">{{ ic('download') }}</a>
+    <button class="ax-doclb-x" id="ax-doclb-x" type="button" aria-label="Close">&times;</button>
+  </div>
+  <iframe class="ax-doclb-frame" id="ax-doclb-frame" title="Document preview"></iframe>
 </div>
 
 <script>
@@ -2202,6 +2338,51 @@
     });
   });
 
+  // ---- Cross-campaign "Filter by type" -------------------------------------
+  // Picking a type collapses every campaign in the channel to just its matching content cards,
+  // each block headed by its campaign marker. "All types" restores the normal campaign view.
+  function applyTypeView(tab, type) {
+    var blocks = qsa('[data-campblock="' + aq(tab) + '"]');
+    var campSel = document.querySelector('[data-campfilter="' + aq(tab) + '"]');
+    var list = document.querySelector('[data-camplist="' + aq(tab) + '"]');
+    var title = document.querySelector('[data-camptitle="' + aq(tab) + '"]');
+    var eb = document.querySelector('[data-campeyebrow="' + aq(tab) + '"]');
+
+    if (type === "all") {
+      // Leave type view: drop the marker mode, un-hide every content card, hand control back to
+      // the campaign switcher (which re-hides the non-selected campaigns).
+      blocks.forEach(function (b) {
+        b.classList.remove("ax-typeview");
+        qsa("[data-content]", b).forEach(function (card) { card.style.display = ""; });
+      });
+      if (campSel) { campSel.disabled = false; }
+      showCampaign(tab, campSel ? campSel.value : "__all__");
+      return;
+    }
+
+    // Enter type view: the campaign switcher is meaningless here, so park it on "All Campaigns".
+    if (list) { list.style.display = "none"; }
+    if (campSel) { campSel.disabled = true; }
+    if (title) { title.textContent = type; }
+    if (eb) { eb.textContent = "Across every campaign"; }
+    blocks.forEach(function (b) {
+      b.classList.add("ax-typeview");
+      var anyMatch = false;
+      qsa("[data-content]", b).forEach(function (card) {
+        var match = card.getAttribute("data-type") === type;
+        card.style.display = match ? "" : "none";
+        if (match) { anyMatch = true; }
+      });
+      // A campaign with no piece of this type drops out entirely (marker and all).
+      b.style.display = anyMatch ? "" : "none";
+    });
+  }
+
+  qsa("[data-globaltypefilter]").forEach(function (sel) {
+    var tab = sel.getAttribute("data-globaltypefilter");
+    sel.addEventListener("change", function () { applyTypeView(tab, sel.value); });
+  });
+
   // On load, focus a specific campaign if the URL asks for it (e.g. "#camp-<id>" right after
   // Add campaign). Without this the page always shows the FIRST campaign in the channel, so a
   // freshly added campaign and its strategy would appear to land on the other campaign.
@@ -2474,13 +2655,23 @@
         if (k.className.indexOf("ax-cal-dow") === -1) { grid.removeChild(k); }
       });
     }
-    // Status mirrors atrium_view.milestones(): past or ready/done -> done (ahead if future), else today/upcoming.
+    // Mirrors atrium_view._event_done/_event_overdue: a content-linked event (carries content_id)
+    // is done only when explicitly marked; left unmarked past its date it is overdue (red). A plain
+    // event keeps green-forward (past -> done). A future marked-done event is "ahead".
+    function markedDone(e) { var s = e.status || ""; return s === "ready" || s === "done"; }
+    function eventDone(e) {
+      var d = e.date || "";
+      var isPast = today !== "" && d < today;
+      if (e.content_id) { return markedDone(e); }
+      return isPast || markedDone(e);
+    }
     function statusOf(e) {
       var d = e.date || "";
-      var s = e.status || "";
-      var done = (today !== "" && d < today) || s === "ready" || s === "done";
-      if (done) { return { cls: "done", text: (today !== "" && d > today) ? "Done ahead" : "Done" }; }
-      if (today !== "" && d === today) { return { cls: "today", text: "Today" }; }
+      var isPast = today !== "" && d < today;
+      var isToday = today !== "" && d === today;
+      if (eventDone(e)) { return { cls: "done", text: (d > today && today !== "") ? "Done ahead" : "Done" }; }
+      if (e.content_id && isPast && !isToday) { return { cls: "overdue", text: "Past due" }; }
+      if (isToday) { return { cls: "today", text: "Today" }; }
       return { cls: "upcoming", text: "Upcoming" };
     }
 
@@ -2505,8 +2696,12 @@
         var ce = byDate[key] || [];
         var isPast = today !== "" && key < today;
         var isToday = today !== "" && key === today;
-        var hasReady = ce.some(function (ev) { return ev.status === "ready" || ev.status === "done"; });
-        var done = ce.length > 0 && (isPast || hasReady);
+        var hasReady = ce.some(markedDone);
+        var doneAny = ce.some(eventDone);
+        var overdueAny = ce.some(function (ev) {
+          return ev.content_id && !markedDone(ev) && isPast && !isToday;
+        });
+        var done = ce.length > 0 && doneAny && !overdueAny;
         var ahead = !isPast && !isToday && hasReady;
         var emptyPast = isPast && inMonth && ce.length === 0 && !done && !ahead && !isToday;
         var cls = "ax-cal-cell";
@@ -2514,6 +2709,7 @@
         if (isPast) { cls += " past"; }
         if (emptyPast) { cls += " pastempty"; }
         if (done) { cls += " done"; }
+        if (overdueAny) { cls += " overdue"; }
         if (ahead) { cls += " ahead"; }
         if (isToday) { cls += " today"; }
         var cell = document.createElement("div");
@@ -2526,6 +2722,11 @@
           chk.className = "ax-cal-check";
           chk.textContent = " ✓";
           dd.appendChild(chk);
+        } else if (overdueAny) {
+          var lt = document.createElement("span");
+          lt.className = "ax-cal-late";
+          lt.textContent = " !";
+          dd.appendChild(lt);
         }
         cell.appendChild(dd);
         ce.forEach(function (ev) {
@@ -2938,6 +3139,25 @@
       var MON = ["January", "February", "March", "April", "May", "June",
                  "July", "August", "September", "October", "November", "December"];
       var KINDS = [["paid", "Paid"], ["organic", "Organic"], ["due", "Due"], ["milestone", "Milestone"]];
+      // Today (SGT business day) for the overdue/red logic, read from the Month-history button.
+      var histBtn = document.querySelector("[data-today]");
+      var todayIso = histBtn ? (histBtn.getAttribute("data-today") || "") : "";
+      // Jump from a linked content event straight to its card on the Lead-Gen / Organic tab:
+      // switch tab, expand the (collapsible) card, scroll it into view and flash it.
+      function gotoContent(cid, tab) {
+        closeDlg();
+        showTab((tab === "organic") ? "organic" : "leadgen", true);
+        var card = document.querySelector('[data-content="' + aq(cid) + '"]');
+        if (!card) { return; }
+        if (card.classList.contains("ax-collapse")) {
+          card.classList.add("is-open");
+          var head = card.querySelector("[data-cardtoggle]");
+          if (head) { head.setAttribute("aria-expanded", "true"); }
+        }
+        if (card.scrollIntoView) { card.scrollIntoView({ behavior: "smooth", block: "center" }); }
+        card.classList.add("ax-flash");
+        window.setTimeout(function () { card.classList.remove("ax-flash"); }, 1700);
+      }
 
       function prettyDay(d) {
         var p = (d || "").split("-");
@@ -2989,19 +3209,48 @@
           return;
         }
         evs.forEach(function (e) {
+          var isDone = e.status === "done" || e.status === "ready";
+          var fromContent = !!e.content_id;
+          // Overdue: a content piece past its date that was never marked done -> red row.
+          var late = fromContent && !isDone && todayIso !== "" && e.date < todayIso;
           var row = document.createElement("div");
-          row.className = "ax-caldlg-row";
+          row.className = "ax-caldlg-row" + (late ? " late" : "");
           var lab = document.createElement("div");
           lab.className = "ax-caldlg-lab";
           lab.textContent = e.label || "(untitled)";
-          if (e.status === "done") {
+          if (isDone) {
             var tag = document.createElement("span");
             tag.className = "ax-tag organic";
             tag.textContent = "✓ Done";
             lab.appendChild(document.createTextNode(" "));
             lab.appendChild(tag);
+          } else if (late) {
+            var ltag = document.createElement("span");
+            ltag.className = "ax-tag";
+            ltag.setAttribute("style", "background:#FDECEC;color:#E5413E");
+            ltag.textContent = "! Past due";
+            lab.appendChild(document.createTextNode(" "));
+            lab.appendChild(ltag);
           }
           row.appendChild(lab);
+
+          // Linked content events show where they came from + an arrow that opens the piece.
+          if (fromContent) {
+            var src = document.createElement("span");
+            var isPaid = (e.kind === "paid") || (e.tab === "leadgen");
+            src.className = "ax-caldlg-src " + (isPaid ? "paid" : "organic");
+            src.textContent = isPaid ? "Lead Generation" : "Organic Content";
+            row.appendChild(src);
+
+            var go = document.createElement("button");
+            go.type = "button";
+            go.className = "ax-caldlg-goto";
+            go.setAttribute("title", "Open this content");
+            go.setAttribute("aria-label", "Open this content");
+            go.innerHTML = "&rarr;";
+            go.addEventListener("click", function () { gotoContent(e.content_id, e.tab); });
+            row.appendChild(go);
+          }
 
           var ksel = kindSelect(e.kind || "milestone");
           ksel.addEventListener("change", function () {
@@ -3012,9 +3261,9 @@
           var doneBtn = document.createElement("button");
           doneBtn.type = "button";
           doneBtn.className = "ax-btn ghost small";
-          doneBtn.textContent = e.status === "done" ? "Mark as not done" : "Mark as done";
+          doneBtn.textContent = isDone ? "Mark as not done" : "Mark as done";
           doneBtn.addEventListener("click", function () {
-            calPost({ op: "status", index: e.index, status: e.status === "done" ? "" : "done" }, doneBtn);
+            calPost({ op: "status", index: e.index, status: isDone ? "" : "done" }, doneBtn);
           });
           row.appendChild(doneBtn);
 
@@ -3128,6 +3377,39 @@
       ev.preventDefault();
       ev.stopPropagation();
       vlbOpen(el.getAttribute("data-playvideo"));
+    });
+  });
+
+  // ===== Document lightbox: click a doc preview -> open it large + scrollable (PDF native; Office
+  // rendered to HTML by /docview). The top bar's download button points at the ?dl=1 URL. =====
+  var dlb = document.getElementById("ax-doclightbox");
+  var dlbFrame = document.getElementById("ax-doclb-frame");
+  var dlbDl = document.getElementById("ax-doclb-dl");
+  var dlbName = document.getElementById("ax-doclb-name");
+  function dlbOpen(preview, dl, name) {
+    if (!dlb || !dlbFrame || !preview) { return; }
+    dlbFrame.setAttribute("src", preview);
+    if (dlbDl && dl) { dlbDl.setAttribute("href", dl); }
+    if (dlbName) { dlbName.textContent = name || "Document"; }
+    dlb.hidden = false;
+  }
+  function dlbClose() {
+    if (!dlb) { return; }
+    dlb.hidden = true;
+    if (dlbFrame) { dlbFrame.removeAttribute("src"); }   // stop loading / release the document
+  }
+  (function () {
+    var x = document.getElementById("ax-doclb-x");
+    if (x) { x.addEventListener("click", dlbClose); }
+  })();
+  document.addEventListener("keydown", function (e) {
+    if (dlb && !dlb.hidden && e.key === "Escape") { dlbClose(); }
+  });
+  qsa("[data-doc]").forEach(function (el) {
+    el.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      dlbOpen(el.getAttribute("data-doc-preview"), el.getAttribute("data-doc-download"), el.getAttribute("data-doc-name"));
     });
   });
 

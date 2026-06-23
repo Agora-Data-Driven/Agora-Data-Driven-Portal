@@ -1086,6 +1086,8 @@ def atrium_admin_add_content(client):
         "platform": request.form.get("platform", "").strip(),
         "caption": request.form.get("caption", "").strip(),
         "video_url": request.form.get("video_url", "").strip(),
+        # An optional publish date mirrors the piece onto the Content Calendar as a linked event.
+        "date": request.form.get("date", "").strip(),
     }
     if content["ref"]:
         content["id"] = content["ref"]
@@ -1105,7 +1107,7 @@ def atrium_admin_edit_content(client):
         return gate
     content_id = request.form.get("content_id", "").strip()
     fields = {}
-    for key in ("ref", "type_tag", "sub_tag", "platform", "caption", "video_url"):
+    for key in ("ref", "type_tag", "sub_tag", "platform", "caption", "video_url", "date"):
         if request.form.get(key) is not None:
             fields[key] = request.form.get(key, "").strip()
     try:
@@ -1312,10 +1314,40 @@ def atrium_creative_image(client, content_id, image_id):
     mime = img.get("mime") or "application/octet-stream"
     resp = Response(data, mimetype=mime)
     resp.headers["Cache-Control"] = "private, max-age=300"
-    # Non-media files (pdf, doc, zip…) download with their original name instead of rendering inline.
-    if not (mime.startswith("image/") or mime.startswith("video/")):
-        safe = (img.get("name") or ("file-" + image_id)).replace('"', "").replace("\r", "").replace("\n", "")
-        resp.headers["Content-Disposition"] = 'attachment; filename="%s"' % safe
+    # Default = inline so a PDF previews in an <iframe>; ?dl=1 forces a download with the original
+    # name (the doc lightbox's download button uses ?dl=1). Always carry the filename so a download
+    # keeps the real name regardless of disposition.
+    safe = (img.get("name") or ("file-" + image_id)).replace('"', "").replace("\r", "").replace("\n", "")
+    disposition = "attachment" if request.args.get("dl") == "1" else "inline"
+    resp.headers["Content-Disposition"] = '%s; filename="%s"' % (disposition, safe)
+    return resp
+
+
+@app.route("/w/<client>/docview/<content_id>/<image_id>", methods=["GET"])
+def atrium_docview(client, content_id, image_id):
+    """Render an attached Office document (docx/xlsx/pptx/csv/txt) to a scrollable HTML preview,
+    served in an <iframe> by the content card + doc lightbox. Same private/authed posture as the
+    creative serve route; PDFs are previewed natively (inline serve) and never reach this route."""
+    if not authed():
+        return redirect(url_for("login", next=request.full_path))
+    if not can_open(client):
+        return Response("Forbidden", status=403, mimetype="text/plain")
+    ws = workspace.load_workspace(client)
+    if ws is None:
+        return Response("Not found", status=404, mimetype="text/plain")
+    _camp, item = workspace._find_content(ws, content_id)
+    if item is None:
+        return Response("Not found", status=404, mimetype="text/plain")
+    img = next((im for im in item.get("images", []) if im.get("id") == image_id), None)
+    if img is None:
+        return Response("Not found", status=404, mimetype="text/plain")
+    data = workspace.read_content_image_bytes(client, content_id, image_id)
+    if data is None:
+        return Response("Not found", status=404, mimetype="text/plain")
+    import atrium_docview
+    page = atrium_docview.render_doc_html(data, img.get("mime") or "", img.get("name") or "")
+    resp = Response(page, mimetype="text/html; charset=utf-8")
+    resp.headers["Cache-Control"] = "private, max-age=300"
     return resp
 
 

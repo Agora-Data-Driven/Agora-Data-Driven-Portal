@@ -56,6 +56,40 @@ def _check(label, cond):
     print("  [OK] %s" % label)
 
 
+def _make_docx(text):
+    """Build a minimal-but-valid .docx (a zip with one paragraph) so the docview extraction has a
+    real OOXML file to parse -- no python-docx / external dep needed."""
+    import zipfile
+
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:body><w:p><w:r><w:t>%s</w:t></w:r></w:p></w:body></w:document>' % text
+    )
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Override PartName="/word/document.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        '</Types>'
+    )
+    rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+        'Target="word/document.xml"/></Relationships>'
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", content_types)
+        z.writestr("_rels/.rels", rels)
+        z.writestr("word/document.xml", document)
+    return buf.getvalue()
+
+
 def run():
     seed_workspace.seed(register_client=False)
     main.app.config.update(TESTING=True, SESSION_COOKIE_SECURE=False, SESSION_COOKIE_SAMESITE="Lax")
@@ -175,6 +209,21 @@ def run():
                data={"campaign_id": "c_paid_1", "ref": "RVR-099", "type_tag": "Reel",
                      "platform": "Instagram", "caption": "A reel for review."})
     _check("inline add-content ok", r.status_code == 200 and r.get_json().get("id") == "RVR-099")
+
+    # Content posted WITH a date mirrors onto the Content Calendar as a linked, paid/leadgen event.
+    r = c.post("/w/%s/admin/content" % CLIENT,
+               data={"campaign_id": "c_paid_1", "ref": "RVR-100", "type_tag": "Reel",
+                     "caption": "Dated reel.", "date": "2026-08-20"})
+    _check("inline add-content with date ok", r.status_code == 200)
+    _linked = [e for e in workspace.load_workspace(CLIENT).get("calendar", [])
+               if e.get("content_id") == "RVR-100"]
+    _check("dated content mirrored onto the calendar via the route",
+           len(_linked) == 1 and _linked[0]["date"] == "2026-08-20"
+           and _linked[0]["kind"] == "paid" and _linked[0]["tab"] == "leadgen")
+    c.post("/w/%s/admin/delete-content" % CLIENT, data={"content_id": "RVR-100"})
+    _check("deleting dated content removes its calendar event via the route",
+           not [e for e in workspace.load_workspace(CLIENT).get("calendar", [])
+                if e.get("content_id") == "RVR-100"])
     r = c.post("/w/%s/admin/edit-content" % CLIENT,
                data={"content_id": "RVR-099", "caption": "An edited reel caption."})
     _check("inline edit-content ok", r.status_code == 200)
@@ -249,8 +298,9 @@ def run():
                content_type="multipart/form-data")
     _check("non-media single-creative upload rejected", r.status_code == 400)
 
-    # add-images now accepts ANY file type: a non-media file (e.g. PDF) is stored, served as a
-    # download (Content-Disposition attachment with its original name), and rendered as a file chip.
+    # add-images now accepts ANY file type. A PDF is stored, served INLINE by default (so it previews
+    # in an <iframe>) and as an attachment with its original name under ?dl=1, and renders as a live
+    # document preview (the doc lightbox), NOT a bare download chip.
     r = c.post("/w/%s/admin/add-images" % CLIENT,
                data={"content_id": "RVR-014", "files": (io.BytesIO(b"%PDF-1.4 hi"), "brief.pdf", "application/pdf")},
                content_type="multipart/form-data")
@@ -259,13 +309,37 @@ def run():
            r.status_code == 200 and j.get("ok") is True and bool(j.get("added")))
     fid = j["added"][0]["id"]
     served = c.get("/w/%s/creative/RVR-014/%s" % (CLIENT, fid))
-    _check("non-media file served with its mime + download filename",
+    _check("PDF served inline by default (previewable)",
            served.status_code == 200 and served.mimetype == "application/pdf"
-           and 'filename="brief.pdf"' in served.headers.get("Content-Disposition", ""))
+           and served.headers.get("Content-Disposition", "").startswith("inline"))
+    dl = c.get("/w/%s/creative/RVR-014/%s?dl=1" % (CLIENT, fid))
+    _check("PDF served as a download with its name under ?dl=1",
+           'attachment; filename="brief.pdf"' in dl.headers.get("Content-Disposition", ""))
     page = c.get("/w/%s/" % CLIENT).get_data(as_text=True)
-    _check("non-media file renders as a download chip",
-           "ax-shot-file" in page and "brief.pdf" in page)
+    _check("PDF renders as a doc tile (PDF icon + opens the doc lightbox)",
+           'class="ax-shot-media ax-shot-doc"' in page and 'data-doc-kind="pdf"' in page
+           and ">PDF</text>" in page and "brief.pdf" in page)
     c.post("/w/%s/admin/remove-image" % CLIENT, data={"content_id": "RVR-014", "image_id": fid})
+
+    # An Office doc (docx) is rendered to a scrollable HTML preview by /docview -- stdlib extraction,
+    # so its actual text shows "inside" the iframe; it renders as an 'office' doc preview in the card.
+    docx_bytes = _make_docx("Riverdance summer brief. Eagle River access.")
+    DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    r = c.post("/w/%s/admin/add-images" % CLIENT,
+               data={"content_id": "RVR-014", "files": (io.BytesIO(docx_bytes), "brief.docx", DOCX_MIME)},
+               content_type="multipart/form-data")
+    j = r.get_json()
+    _check("add-images accepts a docx", r.status_code == 200 and bool(j.get("added")))
+    did = j["added"][0]["id"]
+    dv = c.get("/w/%s/docview/RVR-014/%s" % (CLIENT, did))
+    _check("docview renders the docx text inside a scrollable HTML page",
+           dv.status_code == 200 and "text/html" in dv.mimetype
+           and "Eagle River access" in dv.get_data(as_text=True))
+    page = c.get("/w/%s/" % CLIENT).get_data(as_text=True)
+    _check("docx renders as a Word doc tile pointing at /docview",
+           'data-doc-kind="office"' in page and ">DOC</text>" in page
+           and ("/w/%s/docview/RVR-014/%s" % (CLIENT, did)) in page)
+    c.post("/w/%s/admin/remove-image" % CLIENT, data={"content_id": "RVR-014", "image_id": did})
 
     # Signed-URL "bypass the cap" flow (the GCS signing itself needs cloud; here we test the app side).
     # 1) upload-url degrades gracefully on the local backend (no signing) -> ok:false, never crashes.

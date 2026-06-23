@@ -94,10 +94,22 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
   local-fs backend via `WORKSPACE_LOCAL_DIR` (+ `WORKSPACE_BUCKET`/`WORKSPACE_PREFIX`) so it is
   testable off-cloud. Shape: `metrics`, `today`, `split`, `series`, `activity`, `campaigns[]`
   (`strategy`/`ai_summary`/`strategy_doc` + `content[]` with status `awaiting|approved|changes`,
-  `client_note`, threaded `comments[]` (each `id`/`sender`/`body`/`kind`; a `kind:"changes"` comment
-  is a "Request changes" comment that flips status and carries `resolved`), and optional
-  uploaded-creative `image_object`/`image_mime`),
+  `client_note`, an optional publish `date`, threaded `comments[]` (each `id`/`sender`/`body`/`kind`;
+  a `kind:"changes"` comment is a "Request changes" comment that flips status and carries `resolved`),
+  and optional uploaded-creative `image_object`/`image_mime`),
   `calendar[]`, `conversations[]` (`client`/`agora` messages), per-user `notify` prefs.
+- **Content with a date mirrors onto the Content Calendar (linked event):** when an admin gives a
+  content piece a `date` (in the add/edit-content form), `workspace.add_content`/`update_content`
+  mirror it into `calendar[]` as a linked event carrying `content_id` + `tab` (paid→`leadgen`,
+  organic→`organic`); the piece is the source of truth (editing date/title/channel OVERWRITES the
+  event, clearing the date or deleting the piece removes it), while the calendar keeps its own
+  mark-as-done `status`. The calendar day-popup shows linked events with a "Lead Generation /
+  Organic Content" source tag and a **→** arrow that jumps to the piece on its tab. Done/colour
+  logic (`atrium_view._event_done`/`_event_overdue`): a content-linked event is green only once
+  **explicitly marked done**, **red (overdue)** if past its date and unmarked, green-ahead if a
+  future date is already done; **plain** (non-content) calendar events keep the original
+  green-forward rule (past ⇒ done). The JS in `atrium.html` (day-popup + month-history grid) mirrors
+  this exact logic.
 - **Uploaded creatives = separate private objects (NOT inline in the JSON):** an admin-uploaded
   creative (image OR video) is stored as its own object `workspace/creatives/<c>/<content_id>` in the
   **same registry bucket** (keeps the rewrite-in-full workspace JSON small) and is served ONLY through
@@ -106,6 +118,16 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
   cap, for video seeking; no range → `200` **chunked** full stream with NO `Content-Length`, since
   Cloud Run caps fixed-length responses at ~32 MiB but streams chunked ones unbounded). `workspace.py`
   streams via `blob.open("rb")` (one seekable download), never loading the whole object into memory.
+- **Attached documents preview in place (no download required):** a per-piece attachment (the
+  `images[]` row, served at `GET /w/<c>/creative/<content_id>/<image_id>`) that is a document renders
+  a clean file-type icon (PDF/DOC/XLS/CSV/PPT/TXT band, color per format — `doc_icon` macro) that
+  opens a scrollable doc lightbox with a transparent download button. The
+  serve route is **inline by default** (so a PDF previews in an `<iframe>`); `?dl=1` forces an
+  attachment download with the original filename. PDFs preview natively; Word/Excel/PowerPoint/CSV/
+  text are rendered to scrollable HTML by `dash/atrium_docview.py` (**stdlib only** — `zipfile` +
+  `ElementTree`, no CDN/no new deps) served at `GET /w/<c>/docview/<content_id>/<image_id>`; an
+  unsupported/corrupt file degrades to a friendly "download to view" page. Classification is by
+  filename extension AND mime, so an empty-mime upload no longer renders as a broken `<img>`.
 - **Large creatives bypass the ~32 MiB request cap via a SIGNED URL (opt-in infra):** small files
   still POST through the app (`/w/<c>/admin/upload-creative`); files >30 MiB upload **directly to GCS**.
   The browser asks `POST /w/<c>/admin/creative-upload-url` for a V4 signed PUT URL

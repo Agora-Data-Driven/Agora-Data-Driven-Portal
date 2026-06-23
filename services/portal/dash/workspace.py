@@ -639,11 +639,53 @@ def delete_campaign(client, campaign_id):
     return _mutate(client, fn)
 
 
+def _content_event_kind(camp):
+    """The content calendar 'kind' for a piece, derived from its campaign channel: a paid/lead-gen
+    campaign mirrors as a 'paid' event, anything else as 'organic'."""
+    return "paid" if (camp or {}).get("channel") == "paid" else "organic"
+
+
+def _sync_content_calendar(ws, camp, item):
+    """Keep a content piece's mirrored calendar event in step with the piece (called on add/edit).
+
+    A content piece with a `date` shows up on the Content Calendar as a linked event (the event
+    carries `content_id` back to the piece, plus the `tab` it lives under so the day-popup arrow can
+    jump straight to it). The content piece is the source of truth for the event's date/label/kind/
+    tab -- editing the piece OVERWRITES those on the linked event -- but the calendar keeps its own
+    `status` (mark-as-done) untouched. A piece with no date has no event (any prior one is removed).
+    """
+    cid = item.get("id")
+    if cid is None:
+        return
+    cal = ws.setdefault("calendar", [])
+    existing = next((e for e in cal if e.get("content_id") == cid), None)
+    date = str(item.get("date", "") or "").strip()
+    if not date:
+        if existing is not None:
+            cal.remove(existing)
+        return
+    kind = _content_event_kind(camp)
+    tab = "leadgen" if kind == "paid" else "organic"
+    label = item.get("ref") or item.get("type_tag") or "Content"
+    if existing is not None:
+        existing["date"] = date
+        existing["label"] = label
+        existing["kind"] = kind
+        existing["tab"] = tab
+        existing["campaign_id"] = (camp or {}).get("id")
+    else:
+        cal.append({
+            "date": date, "label": label, "kind": kind,
+            "content_id": cid, "campaign_id": (camp or {}).get("id"), "tab": tab,
+        })
+
+
 def add_content(client, campaign_id, content):
     """Add a content piece to a campaign (team-facing); forces status 'awaiting'. Returns it.
 
-    `content` is a dict of the content fields (ref, type_tag, sub_tag, platform, caption, etc.).
-    Missing id/ref are generated; status is always reset to 'awaiting' for a fresh review.
+    `content` is a dict of the content fields (ref, type_tag, sub_tag, platform, caption, date, etc.).
+    Missing id/ref are generated; status is always reset to 'awaiting' for a fresh review. If the
+    piece carries a `date`, it is also mirrored onto the Content Calendar as a linked event.
     """
     def fn(ws):
         camp = _find_campaign(ws, campaign_id)
@@ -657,23 +699,30 @@ def add_content(client, campaign_id, content):
         item.setdefault("decided_at", "")
         item.setdefault("comments", [])
         camp.setdefault("content", []).append(item)
+        _sync_content_calendar(ws, camp, item)
         return item
     return _mutate(client, fn)
 
 
 def update_content(client, content_id, fields):
-    """Patch fields on an existing content piece (team-facing). Returns the content dict."""
+    """Patch fields on an existing content piece (team-facing). Returns the content dict.
+
+    If the patch touches the piece's date/title (or it already carries a date), the mirrored Content
+    Calendar event is re-synced so the calendar always reflects the piece.
+    """
     def fn(ws):
-        _camp, item = _find_content(ws, content_id)
+        camp, item = _find_content(ws, content_id)
         if item is None:
             raise KeyError("no content '%s'" % content_id)
         item.update(fields or {})
+        _sync_content_calendar(ws, camp, item)
         return item
     return _mutate(client, fn)
 
 
 def delete_content(client, content_id):
-    """Remove a content piece from whatever campaign holds it. Returns the removed piece.
+    """Remove a content piece from whatever campaign holds it (and its mirrored calendar event, if
+    any). Returns the removed piece.
 
     Note: the caller is responsible for deleting any uploaded creative object via delete_creative().
     """
@@ -682,7 +731,10 @@ def delete_content(client, content_id):
             items = camp.get("content", [])
             for i, item in enumerate(items):
                 if item.get("id") == content_id:
-                    return items.pop(i)
+                    removed = items.pop(i)
+                    ws["calendar"] = [e for e in ws.get("calendar", [])
+                                      if e.get("content_id") != content_id]
+                    return removed
         raise KeyError("no content '%s'" % content_id)
     return _mutate(client, fn)
 

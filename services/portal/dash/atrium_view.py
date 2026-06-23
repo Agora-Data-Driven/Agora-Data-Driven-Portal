@@ -150,6 +150,29 @@ def _month_offset(year, month, delta):
     return idx // 12, idx % 12 + 1
 
 
+def _marked_done(ev):
+    """True if the team explicitly marked this event ready/done (the 'Mark as done' toggle)."""
+    return ev.get("status") in ("ready", "done")
+
+
+def _event_done(ev, is_past):
+    """Is this event accomplished (green)?
+
+    A content-linked event (one mirrored from a content piece -- it carries `content_id`) only goes
+    green once it is EXPLICITLY marked done; left unmarked past its date it is 'overdue' (red), so the
+    team can see at a glance what slipped. A plain calendar event keeps the original green-forward rule:
+    a past day with events reads as accomplished.
+    """
+    if ev.get("content_id"):
+        return _marked_done(ev)
+    return is_past or _marked_done(ev)
+
+
+def _event_overdue(ev, is_past, is_today):
+    """A content-linked event that slipped: past its date, not today, and never marked done (red)."""
+    return bool(ev.get("content_id")) and is_past and not is_today and not _marked_done(ev)
+
+
 def _grid_for_month(by_date, today, year, month):
     """Build one Sunday-start month grid for (year, month) from a pre-indexed {iso: [events]} map.
 
@@ -164,7 +187,9 @@ def _grid_for_month(by_date, today, year, month):
             cell_events = by_date.get(iso, [])
             is_past = d < today
             is_today = d == today
-            has_ready = any(ev.get("status") in ("ready", "done") for ev in cell_events)
+            has_ready = any(_marked_done(ev) for ev in cell_events)
+            done_any = any(_event_done(ev, is_past) for ev in cell_events)
+            overdue_any = any(_event_overdue(ev, is_past, is_today) for ev in cell_events)
             cells.append({
                 "day": d.day,
                 "in_month": d.month == month,
@@ -172,9 +197,11 @@ def _grid_for_month(by_date, today, year, month):
                 "is_past": is_past,
                 "iso": iso,
                 "events": cell_events,
-                # Green-forward: a day is 'done' once it's past (with events) or its work is ready;
+                # Green-forward: a day is 'done' once its work is accomplished and nothing on it
+                # slipped; 'overdue' (red) = a content piece past its date never marked done;
                 # 'ahead' = a FUTURE day whose work is already ready/done (done in advance).
-                "done": bool(cell_events) and (is_past or has_ready),
+                "done": bool(cell_events) and done_any and not overdue_any,
+                "overdue": overdue_any,
                 "ahead": (not is_past) and (not is_today) and has_ready,
             })
         weeks.append(cells)
@@ -231,6 +258,10 @@ def calendar_payload(events):
             "label": e.get("label", ""),
             "kind": e.get("kind", "milestone"),
             "status": e.get("status", ""),
+            # Linked content events carry a back-pointer so the day-popup can show a "where it came
+            # from" tag and an arrow that jumps straight to the piece on its Lead-Gen/Organic tab.
+            "content_id": e.get("content_id", ""),
+            "tab": e.get("tab", ""),
         })
     return out
 
@@ -241,10 +272,11 @@ def _fmt_md(d):
 
 
 def milestones(events, today):
-    """Chronological timeline of calendar items, each tagged done / today / upcoming.
+    """Chronological timeline of calendar items, each tagged done / overdue / today / upcoming.
 
-    Mirrors the calendar's green-forward logic: an item is 'done' if its date has passed OR the team
-    marked it ready/done; a future done item is 'ahead' (finished in advance).
+    Mirrors the calendar grid: an item is 'done' if accomplished (a plain item once its date passes,
+    a content-linked item once it is explicitly marked done); a content-linked item left unmarked
+    past its date is 'overdue' (red); a future done item is 'ahead' (finished in advance).
     """
     out = []
     for e in sorted(events or [], key=lambda x: str(x.get("date", ""))):
@@ -252,10 +284,13 @@ def milestones(events, today):
             d = datetime.date.fromisoformat(str(e.get("date", "")))
         except ValueError:
             continue
-        status = e.get("status", "planned")
-        if d < today or status in ("ready", "done"):
+        is_past = d < today
+        is_today = d == today
+        if _event_done(e, is_past):
             state = "done"
-        elif d == today:
+        elif _event_overdue(e, is_past, is_today):
+            state = "overdue"
+        elif is_today:
             state = "today"
         else:
             state = "upcoming"
@@ -580,8 +615,8 @@ def deliverables(ws, today):
         except ValueError:
             continue
         total += 1
-        ready = e.get("status") in ("ready", "done")
-        if d < today or ready:
+        ready = _marked_done(e)
+        if _event_done(e, d < today):
             done += 1
             if d > today and ready:
                 early += 1
