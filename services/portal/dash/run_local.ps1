@@ -34,7 +34,7 @@ if (-not (Test-Path $py)) {
     if (-not (Test-Path $bootstrap)) { $bootstrap = "python" }
     & $bootstrap -m venv $venv
     & $py -m pip install --quiet --upgrade pip
-    & $py -m pip install --quiet "Flask==3.0.3" "requests==2.34.2"
+    & $py -m pip install --quiet "Flask==3.0.3" "requests==2.32.3"
 }
 
 # 1b. AI strategy generation is OPTIONAL and OFF by default. It writes the Insight + Action bullet

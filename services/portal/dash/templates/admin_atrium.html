@@ -100,6 +100,18 @@
     .card .del-x { border: 0; background: transparent; cursor: pointer; color: #c2c7d0; font-size: 18px;
       line-height: 1; padding: 4px 6px; border-radius: 8px; transition: color .12s, background .12s; }
     .card .del-x:hover { color: var(--ag-danger); background: rgba(229,65,62,0.08); }
+    /* Access requests: one row per pending sign-up (details on the left, Approve/Reject on the right). */
+    .reqs .req { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--ag-line); }
+    .reqs .req:first-of-type { border-top: 0; }
+    .reqs .req-main { flex: 1 1 auto; min-width: 0; }
+    .reqs .req-name { font-weight: 800; font-size: 14px; }
+    .reqs .req-sub { font-size: 12px; color: var(--ag-muted); margin-top: 3px; word-break: break-word; }
+    .reqs .req-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+    .reqs .req-actions form { margin: 0; }
+    .btn.small { margin-top: 0; padding: 8px 14px; }
+    .btn-ghost-danger { margin: 0; padding: 8px 14px; border: 1px solid var(--ag-line); border-radius: 10px;
+      background: var(--ag-white); color: var(--ag-danger); font-size: 13px; font-weight: 700; cursor: pointer; }
+    .btn-ghost-danger:hover { border-color: rgba(229,65,62,0.4); background: rgba(229,65,62,0.06); }
     .msglist { font-size: 12px; color: var(--ag-charcoal); border-left: 2px solid var(--ag-line); padding-left: 12px; margin: 0 0 12px; }
     .divider { height: 1px; background: var(--ag-line); margin: 14px 0; border: 0; }
     fieldset { border: 1px solid var(--ag-line); border-radius: 10px; padding: 12px 14px; margin: 0 0 12px; }
@@ -155,6 +167,34 @@
          in place, or add a new one below &mdash; we'll create the login and a blank workspace and drop
          you straight into it.</p>
     </section>
+
+    <!-- Pending self-service sign-ups: approve to create the client + activate their login. -->
+    {% if pending %}
+    <h2 class="section">Access requests ({{ pending|length }})</h2>
+    <div class="panel reqs">
+      <p class="meta">Someone requested an Agora Atrium account. <strong>Approve</strong> to create
+        their client + a blank workspace and switch their login on, or <strong>Reject</strong> to
+        remove the request.</p>
+      {% for a in pending %}
+      <div class="req">
+        <div class="req-main">
+          <div class="req-name">{{ a.requested_name|default(a.name, true)|default(a.email, true) }}</div>
+          <div class="req-sub">{{ a.email }}{% if a.created_at %} &middot; requested {{ a.created_at[:10] }}{% endif %}</div>
+        </div>
+        <div class="req-actions">
+          <form method="post" action="/admin/accounts/approve">
+            <input type="hidden" name="email" value="{{ a.email }}">
+            <button type="submit" class="btn green small">Approve</button>
+          </form>
+          <form method="post" action="/admin/accounts/reject"
+                data-reject-request data-req-email="{{ a.email }}">
+            <button type="submit" class="btn-ghost-danger small">Reject</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     <!-- Pick a client to open their workspace. A card links straight to /w/<key>/. -->
     <h2 class="section">Client workspaces</h2>
@@ -214,6 +254,16 @@
           var name = this.getAttribute("data-client-name") || "this client";
           var ok = window.confirm("Delete " + name + "?\n\nThis removes the client login and their "
             + "entire workspace. This cannot be undone.");
+          if (!ok) { e.preventDefault(); }
+        });
+      }
+      // Reject an access request: confirm with the requester's email before the POST fires.
+      var rejects = document.querySelectorAll("form[data-reject-request]");
+      for (var k = 0; k < rejects.length; k++) {
+        rejects[k].addEventListener("submit", function (e) {
+          var email = this.getAttribute("data-req-email") || "this request";
+          var ok = window.confirm("Reject the access request from " + email + "?\n\n"
+            + "This removes the request. They can sign up again later.");
           if (!ok) { e.preventDefault(); }
         });
       }

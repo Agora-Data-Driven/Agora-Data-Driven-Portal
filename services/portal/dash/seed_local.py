@@ -35,8 +35,18 @@ OTHER_CLIENTS = [
 ]
 
 
+# A real ADMIN account (email + password) for the login-mode preview. This is the same identity the
+# no-password preview auto-signs you in as (dev@localhost), now backed by an actual account so you can
+# sign in AS the admin on the real login page (run_local.ps1 -WithLogin). clients ["*"] = sees all.
+ADMIN_EMAIL = "dev@localhost"
+ADMIN_PW = "dev-admin"
+
+
 def main():
     creds = []
+
+    # Seed the admin account (idempotent: never clobbers a password you later change).
+    store.ensure_admin_account(ADMIN_EMAIL, ADMIN_PW, name="Dev Admin")
 
     # Riverdance: rich demo workspace (refuses to clobber) + registry entry + a known password.
     if not workspace.workspace_exists(DEMO_KEY):
@@ -51,7 +61,9 @@ def main():
         creds.append((key, pw))
 
     print("\n  Local portal seeded. Log in at http://localhost:8080/login")
-    print("  Use ANY email (e.g. owner@example.com) + one of these passwords:\n")
+    print("  ADMIN account (real email + password, sees every client):")
+    print("    %-22s  password: %s" % (ADMIN_EMAIL, ADMIN_PW))
+    print("\n  CLIENT logins -- use ANY email (e.g. owner@example.com) + one of these passwords:\n")
     for key, pw in creds:
         only = " <- single-client: lands straight on the overview" if key == DEMO_KEY else ""
         print("    %-12s  password: %s%s" % (key, pw, only))

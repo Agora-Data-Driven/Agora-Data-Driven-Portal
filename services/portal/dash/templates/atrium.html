@@ -143,8 +143,30 @@
     .ax-iconbtn .ax-bdot { position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--ax-warn); border: 2px solid var(--ax-white); }
     .ax-avatar {
       width: 38px; height: 38px; border-radius: var(--ax-pill); display: grid; place-items: center;
-      background: var(--ax-violet-d); color: #fff; font-size: 13px; font-weight: 800; cursor: pointer;
+      background: var(--ax-violet-d); color: #fff; font-size: 13px; font-weight: 800; cursor: pointer; border: 0;
     }
+    /* Header dropdown menus (notifications + profile). */
+    .ax-menuwrap { position: relative; display: inline-flex; }
+    .ax-menu {
+      position: absolute; top: calc(100% + 10px); right: 0; min-width: 250px; max-width: 320px; z-index: 60;
+      background: var(--ax-white); border: 1px solid var(--ax-line); border-radius: 14px;
+      box-shadow: 0 18px 44px rgba(16,24,40,.18); padding: 8px;
+    }
+    .ax-menu[hidden] { display: none; }
+    .ax-menu-h { font-size: 13px; font-weight: 800; color: var(--ax-ink); padding: 8px 10px 6px; word-break: break-word; }
+    .ax-menu-s2 { font-size: 11px; font-weight: 700; color: var(--ax-violet-d); padding: 0 10px 8px; text-transform: uppercase; letter-spacing: .4px; }
+    .ax-menu-item {
+      display: block; width: 100%; text-align: left; border: 0; background: transparent; cursor: pointer;
+      padding: 9px 10px; border-radius: 10px; font: inherit; color: var(--ax-ink); text-decoration: none;
+    }
+    .ax-menu-item:hover { background: var(--ax-violet-bg); }
+    .ax-menu-t { display: block; font-size: 13px; font-weight: 700; }
+    .ax-menu-s { display: block; font-size: 12px; color: var(--ax-sub); margin-top: 2px; }
+    .ax-menu-empty { font-size: 13px; color: var(--ax-sub); padding: 10px; }
+    .ax-menu-foot { display: block; padding: 9px 10px; margin-top: 4px; border-top: 1px solid var(--ax-line);
+      font-size: 12px; font-weight: 700; color: var(--ax-violet-d); text-decoration: none; }
+    .ax-menu-foot:hover { background: var(--ax-violet-bg); border-radius: 0 0 8px 8px; }
+    .ax-menu-link { color: var(--ax-bad); font-weight: 700; font-size: 13px; }
     .ax-signout {
       display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: var(--ax-pill);
       border: 1px solid var(--ax-line); background: var(--ax-white); color: var(--ax-sub); font-size: 13px; font-weight: 600;
@@ -777,16 +799,46 @@
         </div>
         <div class="ax-top-right">
           <span class="ax-clock" id="ax-clock"></span>
-          <button class="ax-iconbtn" type="button" data-goto="settings" title="Notification settings">
-            {{ ic('bell') }}{% if view.awaiting_total > 0 %}<span class="ax-bdot"></span>{% endif %}
-          </button>
-          <button class="ax-avatar" type="button" data-goto="settings" title="{{ user }}">{{ view.initials }}</button>
+
+          <!-- Notifications: a real dropdown of what needs attention (no longer a jump to settings). -->
+          <div class="ax-menuwrap">
+            <button class="ax-iconbtn" type="button" id="ax-bellbtn" title="Notifications" aria-haspopup="true" aria-expanded="false">
+              {{ ic('bell') }}{% if view.awaiting_total > 0 %}<span class="ax-bdot"></span>{% endif %}
+            </button>
+            <div class="ax-menu" id="ax-bellmenu" hidden>
+              <div class="ax-menu-h">Notifications</div>
+              {% if view.attention %}
+                {% for a in view.attention %}
+                <button class="ax-menu-item" type="button" data-goto="{{ a.tab }}">
+                  <span class="ax-menu-t">{{ a.type_tag }} &middot; {{ a.ref }}</span>
+                  <span class="ax-menu-s">{{ a.campaign_name }} &middot; Awaiting review</span>
+                </button>
+                {% endfor %}
+              {% else %}
+                <div class="ax-menu-empty">You're all caught up. Nothing is waiting on you right now.</div>
+              {% endif %}
+              <a class="ax-menu-foot" href="#" data-goto="settings">Notification settings</a>
+            </div>
+          </div>
+
+          <!-- Profile: the avatar opens a small account menu instead of jumping to settings. -->
+          <div class="ax-menuwrap">
+            <button class="ax-avatar" type="button" id="ax-avatarbtn" title="{{ user }}" aria-haspopup="true" aria-expanded="false">{{ view.initials }}</button>
+            <div class="ax-menu ax-menu-r" id="ax-avatarmenu" hidden>
+              <div class="ax-menu-h">{{ user }}</div>
+              <div class="ax-menu-s2">{{ 'Administrator' if is_superadmin else 'Client workspace' }}</div>
+              {% if is_superadmin %}<a class="ax-menu-item ax-menu-link" href="/logout">Sign out</a>{% endif %}
+            </div>
+          </div>
+
           <button class="ax-share" type="button" id="ax-sharebtn" data-recap="{{ view.recap_b64 }}"
                   title="Copy a shareable link to this month's recap"
                   {% if view.active_tab != 'overview' %}style="display:none"{% endif %}>Share recap <span class="ax-share-arrow">&rarr;</span></button>
-          {% if real_superadmin %}<a class="ax-backadmin" href="/viewas/{{ 'admin' if viewing_as_client else 'client' }}?next={{ request.path|urlencode }}" title="Switch between the admin edit view and the client view">{{ ic('overview') }}<span>{{ 'Back to admin view' if viewing_as_client else 'View as client' }}</span></a>{% endif %}
-          {% if is_superadmin %}<a class="ax-backadmin" href="/admin/atrium" title="Back to all client workspaces">{{ ic('overview') }}<span>All clients</span></a>{% endif %}
+          {% if is_superadmin %}
+          <a class="ax-backadmin" href="/admin/atrium" title="Back to all client workspaces">{{ ic('overview') }}<span>Back</span></a>
+          {% else %}
           <a class="ax-signout" href="/logout">{{ ic('logout') }}<span>Sign out</span></a>
+          {% endif %}
         </div>
       </header>
 
@@ -1759,6 +1811,28 @@
       ev.preventDefault();
       showTab(el.getAttribute("data-goto"), true);
     });
+  });
+
+  // ---- Header dropdown menus (notifications + profile) ---------------------
+  // Each button toggles its own menu; a click anywhere else closes both. Menu items keep their own
+  // behaviour (data-goto switches the tab, the Sign out link navigates) and bubble up to close.
+  function setupMenu(btnId, menuId) {
+    var btn = document.getElementById(btnId);
+    var menu = document.getElementById(menuId);
+    if (!btn || !menu) { return; }
+    btn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var willOpen = menu.hidden;
+      qsa(".ax-menu").forEach(function (m) { m.hidden = true; });
+      menu.hidden = !willOpen;
+      btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+  }
+  setupMenu("ax-bellbtn", "ax-bellmenu");
+  setupMenu("ax-avatarbtn", "ax-avatarmenu");
+  document.addEventListener("click", function () {
+    qsa(".ax-menu").forEach(function (m) { m.hidden = true; });
   });
   window.addEventListener("popstate", function () {
     var parts = window.location.pathname.split("/");

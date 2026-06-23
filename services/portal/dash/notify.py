@@ -107,6 +107,20 @@ def client_commented(client, item, body, user=None):
     _send_email(team_address(), "New Atrium comment on %s" % ref, body or "")
 
 
+# --- visitor -> team ----------------------------------------------------------------------------
+def signup_requested(company, email):
+    """A visitor requested an account via self-service sign-up. Notify the AGORA team.
+
+    There is no client/workspace yet (the request is `pending` until an admin approves), so this only
+    logs + best-effort emails the team inbox -- it never records client activity.
+    """
+    subject = "New Atrium access request: %s" % (company or email)
+    _log("access request from %s <%s>" % (company or "(no company)", email))
+    _send_email(team_address(), subject,
+                "%s (%s) requested an Agora Atrium account. Approve it in the team console." %
+                (company or "A visitor", email))
+
+
 # --- team -> client (gated by each recipient's prefs) -------------------------------------------
 def _eligible_recipients(ws, kind):
     """Return (email, prefs) for users whose master switch AND `kind` toggle are on."""

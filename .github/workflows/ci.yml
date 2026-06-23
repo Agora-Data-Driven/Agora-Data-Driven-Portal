@@ -30,7 +30,7 @@ jobs:
       # google-cloud-storage is deliberately NOT installed: the smoke test stubs it, and the
       # data-layer test uses the local-filesystem backend -- so CI never needs GCP credentials.
       - name: Install test dependencies
-        run: python -m pip install --quiet esprima "Flask==3.0.3" "requests==2.34.2"
+        run: python -m pip install --quiet esprima "Flask==3.0.3" "requests==2.32.3"
 
       - name: Validate inline JS (esprima gate)
         run: |
@@ -39,6 +39,7 @@ jobs:
             services/portal/dash/templates/atrium.html \
             services/portal/dash/templates/portal.html \
             services/portal/dash/templates/login.html \
+            services/portal/dash/templates/signup.html \
             services/portal/dash/templates/admin_atrium.html \
             clients/client_template/dash/dashboard.html ; do
             if [ -f "$f" ]; then
@@ -53,6 +54,10 @@ jobs:
       - name: Atrium data-layer test (off-cloud, no GCS)
         working-directory: services/portal/dash
         run: python _workspace_localtest.py
+
+      - name: Accounts data-layer test (off-cloud, no GCS)
+        working-directory: services/portal/dash
+        run: python _accounts_localtest.py
 
       - name: Atrium route + template smoke test (stubs GCS)
         working-directory: services/portal/dash

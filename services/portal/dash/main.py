@@ -89,8 +89,8 @@ DEV_NOAUTH = os.environ.get("PORTAL_DEV_NOAUTH", "") == "1" and not _secure_cook
 # Deliberate LIVE-demo "no password" mode. Unlike DEV_NOAUTH (interlocked to the local http posture
 # so it stays inert in prod), DEMO_NOAUTH works over https with secure cookies ON -- an operator can
 # flip it on for a presentation and every request is auto-signed-in as a super-admin. OFF by default;
-# only a deploy that sets PORTAL_DEMO_NOAUTH=1 turns it on. Pair it with the "View as client" toggle
-# (the /viewas route + the header button) to demo the clean client-facing view without a 2nd account.
+# only a deploy that sets PORTAL_DEMO_NOAUTH=1 turns it on. To demo the client-facing view, log in with
+# a client password (role is fixed at login -- there is no in-session "view as client" toggle).
 DEMO_NOAUTH = os.environ.get("PORTAL_DEMO_NOAUTH", "") == "1"
 AUTO_LOGIN = DEV_NOAUTH or DEMO_NOAUTH
 # Cap request bodies. On Cloud Run the platform caps requests at ~32 MiB, so live large videos use the
@@ -137,18 +137,18 @@ def can_open(client_key):
 
 
 def real_superadmin():
-    """True iff this session actually holds the super-admin ("*") grant, regardless of view mode."""
+    """True iff this session actually holds the super-admin ("*") grant."""
     return "*" in allowed_clients()
 
 
 def is_superadmin():
-    """Effective super-admin: a real super-admin who has NOT toggled "View as client".
+    """Super-admin: the session holds the "*" grant. Role is fixed at LOGIN, not toggleable.
 
-    The toggle lets an operator preview the exact client-facing view (no admin edit affordances)
-    without logging out. Admin POST routes gate on this too, so while previewing as a client the
-    operator genuinely cannot mutate -- matching what the client can do. Flip back via /viewas/admin.
+    There is deliberately no "view as client" override: who you are (admin vs client) is decided by
+    which password you logged in with (store.verify_portal_login -> ["*"] for admin, else the client
+    keys). Removing the in-session toggle keeps the admin/client boundary a hard, login-derived line.
     """
-    return real_superadmin() and not session.get("view_as_client")
+    return real_superadmin()
 
 
 @app.before_request
@@ -238,19 +238,6 @@ def client_dashboard(client):
                            user=current_user(), **_brand_ctx())
 
 
-@app.route("/viewas/<mode>", methods=["GET"])
-def view_as(mode):
-    """Toggle an operator between the admin (edit) view and the clean client view, in place.
-
-    Only meaningful for a real super-admin; for anyone else it's a harmless no-op redirect. The
-    choice lives in the session, so it persists across pages until toggled back. `mode` is
-    'client' (hide admin affordances, preview as the client) or anything else (back to admin)."""
-    if real_superadmin():
-        session["view_as_client"] = (mode == "client")
-    dest = request.args.get("next") or request.referrer or "/"
-    return redirect(dest)
-
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     next_url = request.values.get("next", "/")
@@ -287,6 +274,50 @@ def login():
             max_age=platform_sso.DEFAULT_TTL_SECONDS,
         )
     return resp
+
+
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    """Self-service client sign-up -> creates a PENDING account an admin then approves.
+
+    A visitor enters their company name, email, and a password; we record a `pending` client account
+    in the registry (no client/workspace is created yet). They cannot log in until an admin approves
+    the request from the team console (which creates the client + a blank workspace and activates the
+    account). This keeps sign-up self-service for clients while the admin stays in control of access.
+    """
+    if request.method == "GET":
+        return render_template("signup.html", error=None, sent=False, **_brand_ctx())
+
+    company = request.form.get("company", "").strip()
+    email = request.form.get("email", "").strip()
+    password = request.form.get("password", "")
+    # Friendly, specific validation (the design guidance: clear messages, email not username, no
+    # confirm field -- the form offers a show-password toggle instead).
+    domain = email.split("@")[-1] if "@" in email else ""
+    if not company:
+        error = "Please enter your company name."
+    elif "@" not in email or "." not in domain:
+        error = "Please enter a valid email address."
+    elif len(password) < 6:
+        error = "Please choose a password of at least 6 characters."
+    elif store.get_account(email) is not None:
+        error = "An account or pending request already exists for that email."
+    else:
+        error = None
+    if error:
+        return render_template("signup.html", error=error, sent=False,
+                               company=company, email=email, **_brand_ctx()), 400
+
+    store.add_account(email, password, name=company, role="client", clients=[],
+                      status="pending", requested_name=company)
+    # Let the team know a request is waiting (graceful: notify falls back to a stdout log if email
+    # isn't configured, and never raises in a way that would fail the sign-up).
+    try:
+        notify.signup_requested(company, email)
+    except Exception:
+        pass
+    return render_template("signup.html", error=None, sent=True,
+                           company=company, email=email, **_brand_ctx())
 
 
 @app.route("/logout", methods=["GET"])
@@ -649,8 +680,6 @@ def atrium(client, tab):
         user=user,
         user_notify=workspace.get_notify(ws, user or ""),
         is_superadmin=is_superadmin(),
-        real_superadmin=real_superadmin(),
-        viewing_as_client=bool(session.get("view_as_client")),
         admin_name=_admin_sender_name(user),
         favicon=brand.FAVICON_DATA_URI,
     )
@@ -1518,7 +1547,8 @@ def admin_atrium():
         logo = (ws.get("brand", {}).get("client_logo") if ws else None) or brand.monogram(name or key)
         clients.append({"key": key, "name": name,
                         "has_workspace": ws is not None, "logo": logo})
-    return render_template("admin_atrium.html", clients=clients,
+    pending = [a for a in store.list_accounts() if a.get("status") == "pending"]
+    return render_template("admin_atrium.html", clients=clients, pending=pending,
                            user=current_user(), workspace_name=WORKSPACE_NAME,
                            msg=request.args.get("msg"), **_brand_ctx())
 
@@ -1564,6 +1594,54 @@ def admin_atrium_new():
     import onboard_client  # lazy: reuses brand_for() + starter_workspace()
     onboard_client.onboard(key, name or None)
     return redirect(url_for("atrium", client=key))
+
+
+def _unique_client_key(base):
+    """Derive a client key from `base` (a company name) that no existing client/workspace uses.
+
+    Slugifies, then appends -2, -3, ... until free, so approving two sign-ups with the same company
+    name never collides on a key (or silently re-points at an existing client)."""
+    root = _slugify_key(base) or "client"
+    key = root
+    n = 2
+    while store.get_client(key) is not None or workspace.workspace_exists(key):
+        key = "%s-%d" % (root, n)
+        n += 1
+    return key
+
+
+@app.route("/admin/accounts/approve", methods=["POST"])
+def admin_account_approve():
+    """Approve a pending sign-up: create the client + a blank workspace, then activate the account.
+
+    After this the client can log in with the email + password they chose at sign-up (verify_portal_login
+    matches the now-`active` account and returns its single client key)."""
+    if not is_superadmin():
+        return Response("Forbidden", status=403, mimetype="text/plain")
+    email = request.form.get("email", "").strip()
+    account = store.get_account(email)
+    if account is None or account.get("status") != "pending":
+        return _atrium_redirect_list("No pending request found for that email.")
+    company = account.get("requested_name") or account.get("name") or email.split("@")[0]
+    key = _unique_client_key(company)
+    import onboard_client  # lazy: reuses brand_for() + starter_workspace()
+    onboard_client.onboard(key, company)            # creates the client + a blank Atrium workspace
+    store.set_account_clients(email, [key])
+    store.set_account_status(email, "active")
+    return _atrium_redirect_list("Approved %s -- created client '%s' and activated their login." %
+                                 (email, key))
+
+
+@app.route("/admin/accounts/reject", methods=["POST"])
+def admin_account_reject():
+    """Reject (delete) a pending sign-up request. No client is created."""
+    if not is_superadmin():
+        return Response("Forbidden", status=403, mimetype="text/plain")
+    email = request.form.get("email", "").strip()
+    removed = store.remove_account(email)
+    if not removed:
+        return _atrium_redirect_list("No request to reject for that email.")
+    return _atrium_redirect_list("Rejected and removed the access request for %s." % email)
 
 
 @app.route("/admin/atrium/<client>/logo", methods=["POST"])

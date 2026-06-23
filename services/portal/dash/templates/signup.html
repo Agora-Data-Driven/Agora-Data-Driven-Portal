@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Agora Data Driven &middot; Portal Login</title>
+  <title>Agora Data Driven &middot; Request access</title>
   {% if favicon %}<link rel="icon" href="{{ favicon }}">{% endif %}
   <style>
     /* Agora Data Driven brand: light, clean -- white space + bold black type + green CTA + purple
-       accent (mirrors assets/brand.json). */
+       accent (mirrors login.html / assets/brand.json). */
     :root {
       --ag-green:#4FAB4A; --ag-green-d:#347A30; --ag-purple:#9484FB; --ag-purple-d:#5C4BD0;
       --ag-ink:#1A1B1E; --ag-charcoal:#353535; --ag-muted:#6B7280; --ag-line:#E7E8EE;
@@ -70,6 +70,16 @@
       transition: border-color .12s, box-shadow .12s;
     }
     input:focus { border-color: var(--ag-green); box-shadow: 0 0 0 3px rgba(79,171,74,.14); }
+    /* Password field + an inline "Show" toggle (the design guidance: prefer show-password over a
+       second confirm field). */
+    .pw-wrap { position: relative; }
+    .pw-wrap input { padding-right: 64px; }
+    .pw-toggle {
+      position: absolute; top: 11px; right: 10px; border: 0; background: transparent; cursor: pointer;
+      color: var(--ag-purple-d); font-size: 12px; font-weight: 700; padding: 4px 6px; border-radius: 8px;
+    }
+    .pw-toggle:hover { background: var(--ag-purple-bg, #F1EFFE); }
+    .hint { color: var(--ag-muted); font-size: 11.5px; margin: -8px 0 18px; }
     button.primary {
       width: 100%;
       padding: 13px 14px;
@@ -93,6 +103,12 @@
       font-size: 13px;
       margin-bottom: 18px;
     }
+    /* "Request received" success panel. */
+    .ok {
+      background: #EAF6E9; border: 1px solid #CDE9CC; color: var(--ag-green-d);
+      padding: 16px 16px; border-radius: 12px; font-size: 13.5px; line-height: 1.5; margin-bottom: 18px;
+    }
+    .ok strong { color: var(--ag-ink); }
     .foot {
       margin-top: 22px;
       text-align: center;
@@ -106,30 +122,61 @@
 <body>
   <main class="card">
     <div class="brand">{{ agora_logo|safe }}<span class="brand-atrium">Agora Atrium</span></div>
-    <p class="sub">Sign in to view your dashboards and workspace.</p>
 
-    {% if error %}
-      <div class="error">{{ error }}</div>
+    {% if sent %}
+      <h1>Request received</h1>
+      <p class="sub">Thanks &mdash; we've got it.</p>
+      <div class="ok">
+        Your request for <strong>{{ company }}</strong> is in. Our team will review it and activate
+        your account, then you'll be able to sign in with <strong>{{ email }}</strong> and the
+        password you chose.
+      </div>
+      <p class="foot">Already approved? <a href="/login">Sign in</a></p>
+    {% else %}
+      <h1>Request access</h1>
+      <p class="sub">Tell us about your company and we'll set up your workspace.</p>
+
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+
+      <!-- Posts to /signup. We create a PENDING account; an admin approves it before you can log in.
+           No password-confirmation field by design -- use the Show toggle to check what you typed. -->
+      <form method="post" action="/signup" autocomplete="off">
+        <label for="company">Company name</label>
+        <input id="company" name="company" type="text" placeholder="Riverdance RV Resort"
+               value="{{ company|default('', true) }}" autofocus>
+
+        <label for="email">Work email</label>
+        <input id="email" name="email" type="email" placeholder="you@company.com"
+               value="{{ email|default('', true) }}">
+
+        <label for="password">Password</label>
+        <div class="pw-wrap">
+          <input id="password" name="password" type="password" placeholder="At least 6 characters">
+          <button class="pw-toggle" type="button" id="pw-toggle" aria-label="Show or hide password">Show</button>
+        </div>
+        <p class="hint">Pick something memorable &mdash; at least 6 characters.</p>
+
+        <button class="primary" type="submit">Request access</button>
+      </form>
+
+      <p class="foot">Already have an account? <a href="/login">Sign in</a></p>
     {% endif %}
-
-    <!-- Posts to /login. The portal verifies the password against Secret Manager and, on success,
-         mints the .agoradatadriven.com SSO cookie (see platform_sso.py) before redirecting. -->
-    <form method="post" action="/login" autocomplete="off">
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" placeholder="you@company.com"
-             value="{{ email|default('', true) }}" autofocus>
-
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" placeholder="Your portal password">
-
-      <!-- Where to send the user after login; the server fills this from ?next= when present. -->
-      <input type="hidden" name="next" value="{{ next|default('/', true) }}">
-
-      <button class="primary" type="submit">Sign in</button>
-    </form>
-
-    <p class="foot">New client? <a href="/signup">Request access</a> &middot; or email
-      <a href="mailto:info@agoradatadriven.com">info@agoradatadriven.com</a></p>
   </main>
+
+  <script>
+    // Show / hide the password (esprima-4.x-safe: classic guards, no ?./??, no Jinja in JS).
+    (function () {
+      var btn = document.getElementById("pw-toggle");
+      var input = document.getElementById("password");
+      if (!btn || !input) { return; }
+      btn.addEventListener("click", function () {
+        var hidden = input.getAttribute("type") === "password";
+        input.setAttribute("type", hidden ? "text" : "password");
+        btn.textContent = hidden ? "Hide" : "Show";
+      });
+    })();
+  </script>
 </body>
 </html>

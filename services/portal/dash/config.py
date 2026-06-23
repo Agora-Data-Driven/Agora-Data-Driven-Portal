@@ -52,6 +52,21 @@ AGENCIES = [
 #     }
 CLIENTS = []
 
+# Accounts (real per-user email+password logins) start EMPTY too. They are created at runtime by
+# self-service sign-up (status "pending" until an admin approves) or seeded directly (e.g. the
+# dev@localhost admin in seed_local.py). store.py owns the shape; one entry looks like:
+#     {
+#         "email": "owner@company.com",      # the login identity (unique, normalised lowercase)
+#         "name": "Owner Name",              # display name / company at sign-up
+#         "role": "client",                  # "client" -> own keys; "admin" -> clients ["*"]
+#         "status": "pending",               # only "active" may log in; sign-ups start "pending"
+#         "clients": [],                     # client keys this account may open (["*"] for admin)
+#         "pw_hash"/"pw_salt"/"pw_plain":    # same pbkdf2 + recoverable-plaintext scheme as clients
+#         "requested_name": "Company Co",    # (pending client sign-ups) the company requested
+#         "created_at": "2026-06-23T09:00:00Z",
+#     }
+ACCOUNTS = []
+
 
 def initial_registry():
     """Return the first full registry snapshot as a plain dict (what seed_registry.py writes).
@@ -64,5 +79,6 @@ def initial_registry():
         "root_domain": ROOT_DOMAIN,
         "agencies": [dict(a) for a in AGENCIES],
         "clients": [dict(c) for c in CLIENTS],
+        "accounts": [dict(a) for a in ACCOUNTS],
         # CRM: future top-level collections (contacts, notes, tasks, deals) grow alongside these.
     }
