@@ -209,8 +209,11 @@ def run():
     _check("video mime stored", vitem.get("image_mime") == "video/mp4")
     served = c.get("/w/%s/creative/RVR-099" % CLIENT)
     _check("video served with mime", served.status_code == 200 and served.mimetype == "video/mp4")
-    _check("workspace renders a <video> for the clip",
-           ('<video src="/w/%s/creative/RVR-099"' % CLIENT) in c.get("/w/%s/" % CLIENT).get_data(as_text=True))
+    vpage = c.get("/w/%s/" % CLIENT).get_data(as_text=True)
+    _check("workspace renders a playable video thumbnail for the clip",
+           ('data-playvideo="/w/%s/creative/RVR-099"' % CLIENT) in vpage)
+    _check("uploaded video creative shows a Remove-video button",
+           'data-removecreative="RVR-099"' in vpage)
     c.post("/w/%s/admin/remove-creative" % CLIENT, data={"content_id": "RVR-099"})
 
     # Add-video "link" half: a pasted URL is stored on the piece, rendered for the client, then cleared.
@@ -219,14 +222,26 @@ def run():
     _check("video-link save ok", r.status_code == 200 and r.get_json().get("ok") is True)
     _camp, litem = workspace._find_content(workspace.load_workspace(CLIENT), "RVR-099")
     _check("video_url stored", litem.get("video_url") == "https://example.com/clip.mp4")
-    _check("workspace renders <video> for a direct mp4 link",
-           '<video src="https://example.com/clip.mp4"' in c.get("/w/%s/" % CLIENT).get_data(as_text=True))
+    page = c.get("/w/%s/" % CLIENT).get_data(as_text=True)
+    _check("workspace renders a playable video thumbnail for a direct mp4 link",
+           'data-playvideo="https://example.com/clip.mp4"' in page)
+    _check("type thumbnail is a clickable play link when a video is attached",
+           'ax-ch-playable' in page and 'href="https://example.com/clip.mp4"' in page)
     r = c.post("/w/%s/admin/video-link" % CLIENT,
                data={"content_id": "RVR-099", "url": "javascript:alert(1)"})
     _check("video-link rejects non-http url", r.status_code == 400 and r.get_json().get("ok") is False)
     r = c.post("/w/%s/admin/video-link" % CLIENT, data={"content_id": "RVR-099", "url": ""})
     _camp, litem = workspace._find_content(workspace.load_workspace(CLIENT), "RVR-099")
     _check("video-link clear ok", r.status_code == 200 and litem.get("video_url") == "")
+
+    # Local backend: an in-app .mp4 upload OVER the 30 MB cloud cap is accepted (no Cloud Run cap
+    # off-cloud), so the same Upload-.mp4 button works locally for big files via the in-app fallback.
+    big = b"\x00" * (32 * 1024 * 1024)   # 32 MB > the 30 MB in-app cloud cap
+    r = c.post("/w/%s/admin/upload-creative" % CLIENT,
+               data={"content_id": "RVR-099", "file": (io.BytesIO(big), "big.mp4", "video/mp4")},
+               content_type="multipart/form-data")
+    _check("local backend accepts a >30 MB in-app .mp4", r.status_code == 200 and r.get_json().get("ok") is True)
+    c.post("/w/%s/admin/remove-creative" % CLIENT, data={"content_id": "RVR-099"})
 
     # Reject a non-media upload (neither image nor video).
     r = c.post("/w/%s/admin/upload-creative" % CLIENT,

@@ -348,12 +348,23 @@
     .ax-shots-admin .ax-btn:hover { background: rgba(0,0,0,.6); }
     .ax-thumb.has-shots .ax-shots-admin .ax-btn { background: var(--ax-white); color: var(--ax-violet-d); border: 1px solid var(--ax-line); }
     .ax-thumb.has-shots .ax-shots-admin .ax-btn:hover { background: var(--ax-violet-bg); }
-    /* Add-video admin form + client-facing video block */
-    .ax-videoform { margin-top: 7px; display: flex; flex-direction: column; gap: 6px; }
-    .ax-videoform .ax-editbox { width: 100%; }
-    .ax-videoform-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    /* Add-video admin form: full-width row under the card header (escapes the 150px media column),
+       input grows, buttons hug the right so the panel fits the buttons and uses all the space. */
+    .ax-videoform { grid-column: 1 / -1; margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+                    padding: 8px; border: 1px solid var(--ax-line); border-radius: 12px; background: var(--ax-violet-bg); }
+    .ax-videoform .ax-editbox { flex: 1 1 200px; min-width: 0; width: auto; margin: 0; }
+    .ax-videoform-row { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: nowrap; }
+    .ax-videoform-row .ax-btn { white-space: nowrap; }
     .ax-videobox { margin: 8px 0 4px; }
     .ax-videobox .ax-shot-media { width: 100%; max-height: 460px; border-radius: 12px; background: #000; }
+    /* Playable thumbnail: the type box becomes a clickable play button when a video link is attached */
+    .ax-ch-playable { position: relative; cursor: pointer; text-decoration: none; transition: filter .15s ease; }
+    .ax-ch-playable:hover { filter: brightness(1.06); }
+    .ax-ch-play { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                  width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+                  border-radius: 999px; background: rgba(255,255,255,.92); color: var(--ax-violet-d);
+                  font-size: 14px; padding-left: 3px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+    .ax-ch-playable .ax-ch-k { opacity: .55; }
     /* Click-to-enlarge lightbox (shared) */
     .ax-lightbox { position: fixed; inset: 0; z-index: 130; background: rgba(10,12,20,.92); display: grid; place-items: center; padding: 40px; }
     .ax-lightbox[hidden] { display: none; }
@@ -362,6 +373,13 @@
     .ax-lightbox-nav.prev { left: 24px; } .ax-lightbox-nav.next { right: 24px; }
     .ax-lightbox-close { position: absolute; top: 20px; right: 24px; width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(255,255,255,.14); color: #fff; font-size: 24px; cursor: pointer; }
     .ax-lightbox-count { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; font-family: ui-monospace, Menlo, Consolas, monospace; background: rgba(255,255,255,.12); padding: 5px 13px; border-radius: 999px; }
+    /* Video lightbox: large semi-fullscreen player */
+    .ax-vlightbox-v { width: min(92vw, 1100px); max-height: 84vh; border-radius: 10px; background: #000; box-shadow: 0 24px 70px rgba(0,0,0,.6); outline: 0; }
+    /* Clickable video thumbnail (poster + play overlay) -- opens the lightbox instead of playing inline */
+    .ax-vidthumb { position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; padding: 0; border: 0; background: #000; cursor: pointer; border-radius: 10px; overflow: hidden; }
+    .ax-vidthumb-v { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+    .ax-vidthumb:hover { filter: brightness(1.06); }
+    .ax-vidthumb .ax-ch-play { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; }
     /* Organic content: collapsible dropdown card (brand-kit themed) */
     .ax-content.ax-collapse { display: block; padding: 0; overflow: hidden; }
     .ax-cardhead { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; width: 100%; padding: 12px 16px; }
@@ -1098,7 +1116,7 @@
                     <div class="ax-car-track" data-cartrack>
                       {% for s in _shots %}
                       <div class="ax-car-slide">
-                        {% if s.mime.startswith('video/') %}<video src="{{ s.url }}" class="ax-shot-media" controls preload="metadata"></video>{% else %}<img class="ax-shot-media" data-shot data-shot-src="{{ s.url }}" src="{{ s.url }}" alt="{{ p.ref }} — picture {{ loop.index }}">{% endif %}
+                        {% if s.mime.startswith('video/') %}<button type="button" class="ax-shot-media ax-vidthumb" data-playvideo="{{ s.url }}" aria-label="Play video"><video class="ax-vidthumb-v" src="{{ s.url }}" muted preload="metadata"></video><span class="ax-ch-play" aria-hidden="true">▶</span></button>{% else %}<img class="ax-shot-media" data-shot data-shot-src="{{ s.url }}" src="{{ s.url }}" alt="{{ p.ref }} — picture {{ loop.index }}">{% endif %}
                         {% if is_superadmin and s.id %}<button class="ax-shot-x" type="button" data-removeimg="{{ p.id }}" data-imgid="{{ s.id }}" title="Remove this picture">&times;</button>{% endif %}
                       </div>
                       {% endfor %}
@@ -1109,6 +1127,11 @@
                     <div class="ax-car-count" data-carcount>1 / {{ _shots|length }}</div>
                     {% endif %}
                   </div>
+                  {% elif p.video_url %}
+                  <a class="ax-ch-thumb {{ chan }} ax-ch-playable" href="{{ p.video_url }}" target="_blank" rel="noopener noreferrer" title="Play video">
+                    <span class="ax-ch-play" aria-hidden="true">▶</span>
+                    <span class="ax-ch-k">{{ p.type_tag or 'Post' }}</span>
+                  </a>
                   {% else %}
                   <span class="ax-ch-thumb {{ chan }}"><span class="ax-ch-k">{{ p.type_tag or 'Post' }}</span></span>
                   {% endif %}
@@ -1118,14 +1141,9 @@
                     <input type="file" accept="image/*,video/*" multiple data-addinput="{{ p.id }}" style="display:none">
                     <button class="ax-btn small" type="button" data-addvideo="{{ p.id }}">＋ Add video</button>
                     <input type="file" accept="video/mp4,.mp4" data-addvideoinput="{{ p.id }}" style="display:none">
-                  </div>
-                  <div class="ax-videoform ax-edit-hidden" data-videoform="{{ p.id }}">
-                    <input class="ax-editbox" data-videourl value="{{ p.video_url|default('', true) }}" placeholder="Paste a video link (.mp4, YouTube, Vimeo…)">
-                    <div class="ax-videoform-row">
-                      <button class="ax-btn violet small" type="button" data-videolinksave="{{ p.id }}">Save link</button>
-                      <button class="ax-btn small" type="button" data-videoupload="{{ p.id }}">Upload .mp4</button>
-                      {% if p.video_url %}<button class="ax-btn danger small" type="button" data-videoremove="{{ p.id }}">Remove video</button>{% endif %}
-                    </div>
+                    {% if p.image_object and (p.image_mime|default('', true)).startswith('video/') %}
+                    <button class="ax-btn danger small" type="button" data-removecreative="{{ p.id }}">Remove video</button>
+                    {% endif %}
                   </div>
                   {% endif %}
                 </div>
@@ -1140,6 +1158,16 @@
                     <span class="ax-chev" aria-hidden="true">&#9662;</span>
                   </span>
                 </button>
+                {% if is_superadmin %}
+                <div class="ax-videoform ax-edit-hidden" data-videoform="{{ p.id }}">
+                  <input class="ax-editbox" data-videourl value="{{ p.video_url|default('', true) }}" placeholder="Paste a video link (.mp4, YouTube, Vimeo…)">
+                  <div class="ax-videoform-row">
+                    <button class="ax-btn violet small" type="button" data-videolinksave="{{ p.id }}">Save link</button>
+                    <button class="ax-btn small" type="button" data-videoupload="{{ p.id }}">Upload .mp4 (≤1&nbsp;GB)</button>
+                    {% if p.video_url %}<button class="ax-btn danger small" type="button" data-videoremove="{{ p.id }}">Remove video</button>{% endif %}
+                  </div>
+                </div>
+                {% endif %}
               </div>
               <div class="ax-detail">
               {% endif %}
@@ -1150,7 +1178,7 @@
                   <div class="ax-car-track" data-cartrack>
                     {% for s in _shots %}
                     <div class="ax-car-slide">
-                      {% if s.mime.startswith('video/') %}<video src="{{ s.url }}" class="ax-shot-media" controls preload="metadata"></video>{% else %}<img class="ax-shot-media" data-shot data-shot-src="{{ s.url }}" src="{{ s.url }}" alt="{{ p.ref }} picture {{ loop.index }}">{% endif %}
+                      {% if s.mime.startswith('video/') %}<button type="button" class="ax-shot-media ax-vidthumb" data-playvideo="{{ s.url }}" aria-label="Play video"><video class="ax-vidthumb-v" src="{{ s.url }}" muted preload="metadata"></video><span class="ax-ch-play" aria-hidden="true">▶</span></button>{% else %}<img class="ax-shot-media" data-shot data-shot-src="{{ s.url }}" src="{{ s.url }}" alt="{{ p.ref }} picture {{ loop.index }}">{% endif %}
                       {% if is_superadmin and s.id %}<button class="ax-shot-x" type="button" data-removeimg="{{ p.id }}" data-imgid="{{ s.id }}" title="Remove this picture">&times;</button>{% endif %}
                     </div>
                     {% endfor %}
@@ -1168,7 +1196,7 @@
                 <div class="ax-shots{{ ' multi' if _shots|length > 1 else '' }}">
                   {% for s in _shots %}
                   <div class="ax-shot">
-                    {% if s.mime.startswith('video/') %}<video src="{{ s.url }}" class="ax-shot-media" controls preload="metadata"></video>{% else %}<img class="ax-shot-media" data-shot data-shot-src="{{ s.url }}" src="{{ s.url }}" alt="{{ p.ref }} picture {{ loop.index }}">{% endif %}
+                    {% if s.mime.startswith('video/') %}<button type="button" class="ax-shot-media ax-vidthumb" data-playvideo="{{ s.url }}" aria-label="Play video"><video class="ax-vidthumb-v" src="{{ s.url }}" muted preload="metadata"></video><span class="ax-ch-play" aria-hidden="true">▶</span></button>{% else %}<img class="ax-shot-media" data-shot data-shot-src="{{ s.url }}" src="{{ s.url }}" alt="{{ p.ref }} picture {{ loop.index }}">{% endif %}
                     {% if is_superadmin and s.id %}<button class="ax-shot-x" type="button" data-removeimg="{{ p.id }}" data-imgid="{{ s.id }}" title="Remove this picture">&times;</button>{% endif %}
                   </div>
                   {% endfor %}
@@ -1198,7 +1226,7 @@
                 {% if p.video_url %}
                 <div class="ax-videobox">
                   {% if p.video_url.split('?')[0].split('#')[0].lower().endswith(('.mp4', '.webm', '.mov', '.m4v', '.ogg')) %}
-                  <video src="{{ p.video_url }}" class="ax-shot-media" controls preload="metadata"></video>
+                  <button type="button" class="ax-shot-media ax-vidthumb" data-playvideo="{{ p.video_url }}" aria-label="Play video"><video class="ax-vidthumb-v" src="{{ p.video_url }}" muted preload="metadata"></video><span class="ax-ch-play" aria-hidden="true">▶</span></button>
                   {% else %}
                   <a class="ax-btn small" href="{{ p.video_url }}" target="_blank" rel="noopener noreferrer">▶ Watch video</a>
                   {% endif %}
@@ -1630,6 +1658,12 @@
   <img class="ax-lightbox-img" id="ax-lb-i" alt="">
   <button class="ax-lightbox-nav next" id="ax-lb-n" type="button" aria-label="Next">&rsaquo;</button>
   <div class="ax-lightbox-count" id="ax-lb-c">1 / 1</div>
+</div>
+
+<!-- Video lightbox: clicking a video opens it large (semi-fullscreen, YouTube-style) -->
+<div class="ax-lightbox ax-vlightbox" id="ax-vlightbox" hidden>
+  <button class="ax-lightbox-close" id="ax-vlb-x" type="button" aria-label="Close">&times;</button>
+  <video class="ax-vlightbox-v" id="ax-vlb-v" controls playsinline preload="metadata"></video>
 </div>
 
 <script>
@@ -2824,6 +2858,39 @@
     else if (e.key === "ArrowRight") { lbxNav(1); }
   });
 
+  // ===== Video lightbox: click a video thumbnail -> play it large (semi-fullscreen, YouTube-style) =====
+  var vlb = document.getElementById("ax-vlightbox");
+  var vlbV = document.getElementById("ax-vlb-v");
+  function vlbOpen(src) {
+    if (!vlb || !vlbV || !src) { return; }
+    vlbV.setAttribute("src", src);
+    vlb.hidden = false;
+    var pr = vlbV.play();
+    if (pr && pr.catch) { pr.catch(function () {}); }   // autoplay may be blocked; controls still work
+  }
+  function vlbClose() {
+    if (!vlb || !vlbV) { return; }
+    vlbV.pause();
+    vlbV.removeAttribute("src");
+    vlbV.load();                                          // stop buffering the (possibly large) file
+    vlb.hidden = true;
+  }
+  (function () {
+    var x = document.getElementById("ax-vlb-x");
+    if (x) { x.addEventListener("click", vlbClose); }
+    if (vlb) { vlb.addEventListener("click", function (e) { if (e.target === vlb) { vlbClose(); } }); }
+  })();
+  document.addEventListener("keydown", function (e) {
+    if (vlb && !vlb.hidden && e.key === "Escape") { vlbClose(); }
+  });
+  qsa("[data-playvideo]").forEach(function (el) {
+    el.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      vlbOpen(el.getAttribute("data-playvideo"));
+    });
+  });
+
   // Click an image thumbnail -> open the lightbox with that ticket's pictures.
   qsa("[data-shot]").forEach(function (el) {
     if (el.getAttribute("data-vid") === "1") { return; }
@@ -2895,13 +2962,52 @@
     btn.addEventListener("click", function () { input.click(); });
     input.addEventListener("change", function () {
       if (!input.files || !input.files.length) { return; }
-      var f = input.files[0];
-      var isMp4 = f.type === "video/mp4" || /\.mp4$/i.test(f.name);
+      var file = input.files[0];
+      var isMp4 = file.type === "video/mp4" || /\.mp4$/i.test(file.name);
       if (!isMp4) { adminMsg("Please choose an .mp4 file.", false); input.value = ""; return; }
+      var MAX_BYTES = 1024 * 1024 * 1024;          // hard ceiling: 1 GB
+      if (file.size > MAX_BYTES) { adminMsg("That video is over 1 GB. Please use a smaller file or paste a link.", false); input.value = ""; return; }
+      var ctype = "video/mp4";
+      var DIRECT_MAX = 30 * 1024 * 1024;           // <=30 MB goes through the app; larger -> direct to GCS
       btn.setAttribute("disabled", "disabled");
-      uploadImages(id, [f])
-        .then(function () { window.location.reload(); })
-        .catch(function () { btn.removeAttribute("disabled"); adminMsg("Upload failed. The file may exceed 30 MB — use a link instead.", false); });
+      function done() { window.location.reload(); }
+      function fail(msg) { adminMsg(msg || "Upload failed. Try again.", false); btn.removeAttribute("disabled"); input.value = ""; }
+      // The in-app upload path: used for small files, AND as the fallback when no signed URL is
+      // available (e.g. local dev, which has no GCS to sign for — the in-app route accepts large
+      // files off-cloud). Stored as the piece's creative (renders inline).
+      function inApp() {
+        var body = new FormData();
+        body.append("content_id", id);
+        body.append("file", file);
+        adminMsg("Uploading video…", true);
+        postData("/admin/upload-creative", body).then(done).catch(function () { fail("Upload failed. Try a smaller file or paste a link."); });
+      }
+      // Large files go STRAIGHT to GCS via a signed URL, bypassing Cloud Run's ~32 MB request cap.
+      if (file.size <= DIRECT_MAX) { inApp(); return; }
+      adminMsg("Preparing large upload…", true);
+      var meta = new FormData();
+      meta.append("content_id", id);
+      meta.append("content_type", ctype);
+      postData("/admin/creative-upload-url", meta).then(function (d) {
+        if (!d || !d.ok || !d.url) { inApp(); return; }   // no signing (local dev) -> in-app upload
+        var xhr = new XMLHttpRequest();
+        xhr.open("PUT", d.url, true);
+        xhr.setRequestHeader("Content-Type", ctype);
+        if (xhr.upload) {
+          xhr.upload.onprogress = function (e) { if (e.lengthComputable) { adminMsg("Uploading… " + Math.round(e.loaded * 100 / e.total) + "%", true); } };
+        }
+        xhr.onload = function () {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            adminMsg("Finishing…", true);
+            var c2 = new FormData();
+            c2.append("content_id", id);
+            c2.append("content_type", ctype);
+            postData("/admin/creative-confirm", c2).then(done).catch(function () { fail("Uploaded, but could not be recorded. Refresh and retry."); });
+          } else { fail("Direct upload failed (" + xhr.status + "). Try again."); }
+        };
+        xhr.onerror = function () { fail("Direct upload failed. Check your connection and retry."); };
+        xhr.send(file);
+      }).catch(function () { inApp(); });
     });
   });
 

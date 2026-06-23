@@ -93,8 +93,12 @@ DEV_NOAUTH = os.environ.get("PORTAL_DEV_NOAUTH", "") == "1" and not _secure_cook
 # (the /viewas route + the header button) to demo the clean client-facing view without a 2nd account.
 DEMO_NOAUTH = os.environ.get("PORTAL_DEMO_NOAUTH", "") == "1"
 AUTO_LOGIN = DEV_NOAUTH or DEMO_NOAUTH
-# Cap request bodies. The largest legitimate POST is a voice feedback note; keep it bounded.
-app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # 32 MiB (Cloud Run's request cap; fits short video creatives)
+# Cap request bodies. On Cloud Run the platform caps requests at ~32 MiB, so live large videos use the
+# signed-URL direct-to-GCS path. In LOCAL dev (local-fs backend, no GCS to sign for) there is no such
+# cap and no signing, so allow large in-app uploads (~1 GB) so the same "Upload .mp4" button works
+# end-to-end off-cloud. _LOCAL_BACKEND is true exactly when the workspace runs on the local-fs backend.
+_LOCAL_BACKEND = bool(os.environ.get("WORKSPACE_LOCAL_DIR"))
+app.config["MAX_CONTENT_LENGTH"] = (1100 * 1024 * 1024) if _LOCAL_BACKEND else (32 * 1024 * 1024)
 
 # Per-upstream-dashboard proxy sessions, keyed by client key. Each holds the upstream <c>-dash
 # login cookie so we only log into a dashboard ONCE server-side, then reuse the session. This is
@@ -833,6 +837,7 @@ def atrium_creative(client, content_id):
 # reuses the same workspace.py mutators; all are gated super-admin via _atrium_admin_json_gate.
 ATRIUM_UPLOAD_MAX_BYTES = 8 * 1024 * 1024    # images: reject larger than 8 MB
 ATRIUM_VIDEO_MAX_BYTES = 30 * 1024 * 1024    # videos: kept under Cloud Run's ~32 MiB request cap
+ATRIUM_VIDEO_MAX_BYTES_LOCAL = 1024 * 1024 * 1024  # local dev (no Cloud Run cap): in-app accepts up to 1 GB
 # A client LOGO is inlined into the workspace JSON (brand.client_logo), which is rewritten in full on
 # every edit -- so keep it tiny. Seeded logos sit around ~70 KB; 512 KB is a generous ceiling.
 LOGO_MAX_BYTES = 512 * 1024
@@ -1116,7 +1121,8 @@ def atrium_admin_upload_creative(client):
     mime = (upload.mimetype or "").lower()
     if mime not in _ATRIUM_MEDIA_EXT:
         return Response('{"error":"unsupported_type"}', status=400, mimetype="application/json")
-    max_bytes = ATRIUM_VIDEO_MAX_BYTES if mime in _ATRIUM_VIDEO_EXT else ATRIUM_UPLOAD_MAX_BYTES
+    video_cap = ATRIUM_VIDEO_MAX_BYTES_LOCAL if _LOCAL_BACKEND else ATRIUM_VIDEO_MAX_BYTES
+    max_bytes = video_cap if mime in _ATRIUM_VIDEO_EXT else ATRIUM_UPLOAD_MAX_BYTES
     data = upload.read(max_bytes + 1)
     if len(data) > max_bytes:
         return Response('{"error":"too_large"}', status=413, mimetype="application/json")
@@ -1146,12 +1152,18 @@ def atrium_admin_creative_upload_url(client):
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     try:
         url, _obj = workspace.signed_upload_url(client, content_id, mime)
-    except Exception:
+    except Exception as e:
         # Signing unavailable/misconfigured -> tell the client to fall back to the in-app upload.
-        app.logger.exception("creative-upload-url signing failed for %s/%s", client, content_id)
-        return jsonify(ok=False, error="sign_unavailable")
+        # app.logger isn't always wired to Cloud Run's log stream, so print the traceback to stderr
+        # (which IS captured) and surface the error detail (this route is super-admin only).
+        import sys
+        import traceback as _tb
+        sys.stderr.write("creative-upload-url signing failed for %s/%s\n" % (client, content_id))
+        _tb.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        return jsonify(ok=False, error="sign_unavailable", detail=str(e))
     if not url:
-        return jsonify(ok=False, error="sign_unavailable")
+        return jsonify(ok=False, error="sign_unavailable", detail="signer_returned_no_url")
     return jsonify(ok=True, url=url, mime=mime)
 
 

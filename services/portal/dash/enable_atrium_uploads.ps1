@@ -42,12 +42,15 @@ $cors = @'
 ]
 '@
 $tmp = New-TemporaryFile
+$tmpPath = $tmp.FullName
 try {
   # UTF-8 without BOM (gcloud/JSON parsers choke on a BOM).
-  [System.IO.File]::WriteAllText($tmp.FullName, $cors, (New-Object System.Text.UTF8Encoding($false)))
-  gcloud storage buckets update $Bucket --cors-file=$tmp.FullName --project=$Project
+  [System.IO.File]::WriteAllText($tmpPath, $cors, (New-Object System.Text.UTF8Encoding($false)))
+  # NOTE: pass the path as its own variable -- "$tmp.FullName" inside an arg expands only $tmp and
+  # appends the literal ".FullName", pointing gcloud at a path that doesn't exist.
+  gcloud storage buckets update $Bucket --cors-file=$tmpPath --project=$Project
 } finally {
-  Remove-Item $tmp.FullName -Force -ErrorAction SilentlyContinue
+  Remove-Item $tmpPath -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "[OK] Atrium large-creative uploads are enabled (signed-URL direct-to-GCS)."
