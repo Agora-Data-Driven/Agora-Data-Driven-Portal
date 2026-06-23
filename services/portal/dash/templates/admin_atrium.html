@@ -65,6 +65,8 @@
     .flash { background: var(--ag-green-bg); border: 1px solid #CDE9CC; color: var(--ag-green-d);
       border-radius: 12px; padding: 12px 16px; margin-bottom: 20px; font-size: 13.5px; font-weight: 600;
       word-break: break-word; }
+    /* An error flash is unmistakably red, so a rejected action never looks like a green success. */
+    .flash.err { background: #FDECEC; border-color: rgba(229,65,62,0.35); color: #9b2c2a; }
     .welcome { background: linear-gradient(120deg, #fff 0%, #F6FBF5 58%, #F3F1FE 100%);
       border: 1px solid var(--ag-line); border-radius: 18px; padding: 24px 26px; margin: 0 0 22px; box-shadow: var(--ag-shadow); }
     .welcome h1 { margin: 0 0 8px; font-size: 24px; font-weight: 900; letter-spacing: -0.3px; }
@@ -153,6 +155,10 @@
     <aside class="side">
       <div class="side-brand">{{ agora_logo|safe }}<span class="brand-sub">{{ workspace_name }} &middot; Team</span></div>
       <nav class="side-nav" id="side-nav">
+        <button type="button" class="nav-item" data-section="profile">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>Profile</span>
+        </button>
         <button type="button" class="nav-item" data-section="clients">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
           <span>Clients</span>
@@ -164,15 +170,11 @@
         </button>
         <button type="button" class="nav-item" data-section="accounts">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <span>Accounts</span>
+          <span>Manage Accounts</span>
         </button>
         <button type="button" class="nav-item" data-section="create">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           <span>Create account</span>
-        </button>
-        <button type="button" class="nav-item" data-section="profile">
-          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <span>Profile</span>
         </button>
       </nav>
       <div class="side-foot">
@@ -183,12 +185,12 @@
 
     <!-- ===================== CONTENT ===================== -->
     <main class="content">
-      {% if msg %}<div class="flash">{{ msg }}</div>{% endif %}
+      {% if msg %}<div class="flash {{ 'err' if flash_err else '' }}">{{ msg }}</div>{% endif %}
 
       <!-- ---------- CLIENTS ---------- -->
       <section class="pane" data-pane="clients">
         <div class="welcome">
-          <h1>Welcome to the Admin Portal</h1>
+          <h1>Welcome to the Atrium</h1>
           <p>Your home base for every Agora client. Click a client to open their workspace and edit it
              in place, or add a new one below &mdash; we'll create the login and a blank workspace and drop
              you straight into it.</p>
@@ -270,7 +272,7 @@
 
       <!-- ---------- ACCOUNTS ---------- -->
       <section class="pane" data-pane="accounts">
-        <h1 class="page">Accounts</h1>
+        <h1 class="page">Manage Accounts</h1>
         <p class="lead">Every login to the portal. Change or reset a client's password from here, or
           remove an account. {% if is_root_admin %}As the super admin you can also manage admin accounts.{% endif %}</p>
 
@@ -284,6 +286,7 @@
                 <div class="acct-sub">{{ a.email }} &middot; {{ a.client_label }}</div>
               </div>
               <div class="acct-actions">
+                {% if a.client_key %}<a class="btn small" href="/w/{{ a.client_key }}/?preview=client" title="See the client's own view">View client site →</a>{% endif %}
                 <form class="acct-pw" method="post" action="/admin/accounts/set-password">
                   <input type="hidden" name="email" value="{{ a.email }}">
                   <input type="text" name="password" placeholder="New password (min 6)" autocomplete="off">
@@ -312,8 +315,8 @@
             <div class="acct">
               <div class="acct-main">
                 <div class="acct-name">{{ a.name }}
-                  {% if a.role == 'superadmin' %}<span class="badge role-superadmin">Super admin</span>
-                  {% else %}<span class="badge role-admin">Admin</span>{% endif %}
+                  {% if a.role == 'superadmin' %}<span class="badge role-superadmin">Super administrator</span>
+                  {% else %}<span class="badge role-admin">Administrator</span>{% endif %}
                 </div>
                 <div class="acct-sub">{{ a.email }} &middot; All clients</div>
               </div>
@@ -385,8 +388,8 @@
         <p class="lead">Your operator account.</p>
         <div class="panel">
           <div class="acct-name" style="font-size:16px">{{ profile.name }}
-            {% if profile.role == 'superadmin' %}<span class="badge role-superadmin">Super admin</span>
-            {% else %}<span class="badge role-admin">Admin</span>{% endif %}
+            {% if profile.role == 'superadmin' %}<span class="badge role-superadmin">Super administrator</span>
+            {% else %}<span class="badge role-admin">Administrator</span>{% endif %}
           </div>
           <div class="acct-sub" style="margin-top:6px">{{ profile.email }}</div>
           {% if profile.role == 'superadmin' %}

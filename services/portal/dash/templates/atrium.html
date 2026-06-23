@@ -213,6 +213,13 @@
     /* Cards / panels */
     .ax-card { background: var(--ax-white); border: 1px solid var(--ax-line); border-radius: var(--ax-radius); box-shadow: var(--ax-shadow); transition: box-shadow .18s ease, transform .18s ease; }
     .ax-card:hover { box-shadow: var(--ax-shadow-lg); transform: translateY(-2px); }
+    /* Brief highlight when a notification jumps straight to a content piece. */
+    .ax-flash-target { animation: ax-flash 1.8s ease; }
+    @keyframes ax-flash {
+      0%   { box-shadow: 0 0 0 0 rgba(148,132,251,0); }
+      12%  { box-shadow: 0 0 0 3px rgba(148,132,251,.85); }
+      100% { box-shadow: 0 0 0 0 rgba(148,132,251,0); }
+    }
     .ax-panel { background: var(--ax-white); border: 1px solid var(--ax-line); border-radius: var(--ax-radius); box-shadow: var(--ax-shadow); padding: 18px; }
 
     /* Dashboard: embedded Looker Studio report (gradient border + soft green glow) */
@@ -700,6 +707,16 @@
     .ax-adminbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; padding: 10px 14px; background: #1c2440; color: #eaf0ff; border-radius: 12px; font-size: 13px; }
     .ax-adminbar .ax-adminbadge { font-size: 10.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; background: var(--ax-violet); color: #fff; padding: 2px 9px; border-radius: var(--ax-pill); }
     .ax-adminbar .ax-adminmsg { margin-left: auto; font-size: 12.5px; color: #b9c2e6; }
+    /* "Preview as client" link in the admin bar, and the green "you're in preview" banner. */
+    .ax-adminbar .ax-previewlink { margin-left: auto; color: #cdd6f7; font-weight: 700; text-decoration: none;
+      border: 1px solid rgba(255,255,255,.25); padding: 5px 11px; border-radius: var(--ax-pill); font-size: 12.5px; }
+    .ax-adminbar .ax-previewlink:hover { background: rgba(255,255,255,.10); color: #fff; }
+    .ax-adminbar .ax-adminmsg + .ax-previewlink, .ax-adminbar .ax-previewlink + .ax-adminmsg { margin-left: 8px; }
+    .ax-previewbar { background: var(--ax-grad-green, #2f8f2a); color: #fff; }
+    .ax-previewbar .ax-adminbadge { background: #fff; color: var(--ax-good, #2f8f2a); }
+    .ax-previewbar .ax-previewexit { margin-left: auto; color: #fff; font-weight: 800; text-decoration: none;
+      border: 1px solid rgba(255,255,255,.55); padding: 5px 11px; border-radius: var(--ax-pill); font-size: 12.5px; }
+    .ax-previewbar .ax-previewexit:hover { background: rgba(255,255,255,.16); }
     .ax-btn.admin { background: #2b3766; color: #eaf0ff; border-color: #394680; }
     .ax-btn.admin:hover { background: #36447e; }
     .ax-btn.danger { background: var(--ax-white); color: var(--ax-bad); border-color: rgba(229,65,62,.4); }
@@ -880,7 +897,7 @@
               <div class="ax-menu-h">Notifications</div>
               {% if view.attention %}
                 {% for a in view.attention %}
-                <button class="ax-menu-item" type="button" data-goto="{{ a.tab }}">
+                <button class="ax-menu-item" type="button" data-goto="{{ a.tab }}" data-gocamp="{{ a.camp_id }}" data-gocontent="{{ a.id }}">
                   <span class="ax-menu-t">{{ a.type_tag }} &middot; {{ a.ref }}</span>
                   <span class="ax-menu-s">{{ a.campaign_name }} &middot; Awaiting review</span>
                 </button>
@@ -897,7 +914,7 @@
             <button class="ax-avatar" type="button" id="ax-avatarbtn" title="{{ user }}" aria-haspopup="true" aria-expanded="false">{{ view.initials }}</button>
             <div class="ax-menu ax-menu-r" id="ax-avatarmenu" hidden>
               <div class="ax-menu-h">{{ user }}</div>
-              <div class="ax-menu-s2">{{ 'Administrator' if is_superadmin else 'Client workspace' }}</div>
+              <div class="ax-menu-s2">{{ 'Super administrator' if is_superadmin else 'Client workspace' }}</div>
               {% if is_superadmin %}<a class="ax-menu-item ax-menu-link" href="/logout">Sign out</a>{% endif %}
             </div>
           </div>
@@ -915,10 +932,19 @@
 
       <main class="ax-body">
 
+        {% if admin_preview %}
+        <div class="ax-adminbar ax-previewbar">
+          <span class="ax-adminbadge">Client preview</span>
+          <span>This is exactly what {{ ws.display_name }}'s client sees when they log in &mdash; editing tools are hidden.</span>
+          <a class="ax-previewexit" href="{{ request.path }}">Exit preview &amp; edit &rarr;</a>
+        </div>
+        {% endif %}
+
         {% if is_superadmin %}
         <div class="ax-adminbar">
           <span class="ax-adminbadge">Admin edit</span>
           <span>You're viewing {{ ws.display_name }}'s workspace as AGORA. Edits here change what the client sees.</span>
+          <a class="ax-previewlink" href="{{ request.path }}?preview=client">Preview as client &rarr;</a>
           <span class="ax-adminmsg" id="ax-admin-msg"></span>
         </div>
         {% endif %}
@@ -1070,7 +1096,7 @@
               {% if view.attention %}
                 <div class="ax-list">
                   {% for a in view.attention %}
-                  <div class="ax-row ax-attn" data-goto="{{ a.tab }}">
+                  <div class="ax-row ax-attn" data-goto="{{ a.tab }}" data-gocamp="{{ a.camp_id }}" data-gocontent="{{ a.id }}">
                     <span class="ax-row-ic" style="background:{{ '#F1EFFE' if a.channel=='paid' else '#EAF6E9' }};color:{{ '#5C4BD0' if a.channel=='paid' else '#347A30' }}">{{ ic('check') }}</span>
                     <div class="ax-row-main">
                       <div class="ax-row-t">{{ a.type_tag }} &middot; {{ a.ref }}</div>
@@ -1894,10 +1920,34 @@
       showTab(a.getAttribute("data-tab"), true);
     });
   });
+  // Reveal one content piece: switch tab, switch to its campaign, scroll it into view + flash it.
+  function gotoContent(tab, campId, contentId) {
+    showTab(tab, true);
+    if (campId) { showCampaign(tab, campId); }
+    if (!contentId) { return; }
+    var card = document.querySelector('[data-content="' + aq(contentId) + '"]');
+    if (!card) { return; }
+    // Collapsible (organic) cards start closed — open the one we're jumping to.
+    if (card.classList.contains("ax-collapse")) {
+      card.classList.add("is-open");
+      var head = card.querySelector("[data-cardtoggle]");
+      if (head) { head.setAttribute("aria-expanded", "true"); }
+    }
+    if (card.scrollIntoView) { card.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    card.classList.remove("ax-flash-target");
+    // Force reflow so the class re-add restarts the animation on repeat clicks.
+    void card.offsetWidth;
+    card.classList.add("ax-flash-target");
+  }
   qsa("[data-goto]").forEach(function (el) {
     el.addEventListener("click", function (ev) {
       ev.preventDefault();
-      showTab(el.getAttribute("data-goto"), true);
+      var contentId = el.getAttribute("data-gocontent");
+      if (contentId) {
+        gotoContent(el.getAttribute("data-goto"), el.getAttribute("data-gocamp"), contentId);
+      } else {
+        showTab(el.getAttribute("data-goto"), true);
+      }
     });
   });
 

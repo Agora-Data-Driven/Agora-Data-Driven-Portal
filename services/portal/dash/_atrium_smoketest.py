@@ -135,7 +135,7 @@ def run():
     store.add_client(CLIENT, "Riverdance RV Resort")
     store.add_client("template", "Template")
     landing = c.get("/admin/atrium").get_data(as_text=True)
-    _check("console landing renders welcome", "Welcome to the Admin Portal" in landing)
+    _check("console landing renders welcome", "Welcome to the Atrium" in landing)
     _check("console card opens the workspace directly", ('href="/w/%s/"' % CLIENT) in landing)
     _check("template client hidden from console", '<div class="name">Template</div>' not in landing)
     store.remove_client("template")

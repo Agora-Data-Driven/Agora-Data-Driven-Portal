@@ -718,6 +718,11 @@ def atrium(client, tab):
         tab = "dashboard"
     user = current_user()
     view = atrium_view.build(ws, client, user, tab)
+    # Admin-only "Preview as client": a real admin can append ?preview=client to SEE the exact
+    # client-facing view (admin edit affordances hidden) WITHOUT changing their session/role. This is
+    # not the old in-header session toggle (which could flip roles) -- it's a per-request preview the
+    # client themselves never see, so the login-derived role boundary stays intact.
+    admin_preview = is_superadmin() and request.args.get("preview") == "client"
     return render_template(
         "atrium.html",
         workspace_name=WORKSPACE_NAME,
@@ -725,7 +730,8 @@ def atrium(client, tab):
         view=view,
         user=user,
         user_notify=workspace.get_notify(ws, user or ""),
-        is_superadmin=is_superadmin(),
+        is_superadmin=(is_superadmin() and not admin_preview),
+        admin_preview=admin_preview,
         admin_name=_admin_sender_name(user),
         favicon=brand.FAVICON_DATA_URI,
     )
@@ -1585,9 +1591,12 @@ def atrium_admin_reply_inline(client):
 # The console is the LANDING PAGE only: a card grid to open / add / delete clients. There is no
 # per-client management page anymore -- the team edits each workspace IN PLACE via /w/<c>/admin/*
 # (see the in-workspace admin editing section above), and a card opens that workspace directly.
-def _atrium_redirect_list(msg, section=None):
-    """Redirect back to the console with a flash message, optionally reopening a given section pane."""
-    return redirect(url_for("admin_atrium", msg=msg, section=section))
+def _atrium_redirect_list(msg, section=None, err=False):
+    """Redirect back to the console with a flash, optionally reopening a section pane.
+
+    `err=True` marks the flash as an ERROR so the console styles it red (a rejected action must not
+    look like a green success -- that was the "it silently didn't add" confusion)."""
+    return redirect(url_for("admin_atrium", msg=msg, section=section, err=(1 if err else None)))
 
 
 def _account_view(account, name_by_key):
@@ -1605,6 +1614,8 @@ def _account_view(account, name_by_key):
         "role": account.get("role") or "client",
         "status": account.get("status") or "active",
         "client_label": label,
+        # The client's own workspace key, so the console can link straight to that client's site.
+        "client_key": next((k for k in keys if k != "*"), ""),
         "created_at": account.get("created_at", ""),
     }
 
@@ -1649,7 +1660,7 @@ def admin_atrium():
         profile=profile, is_root_admin=is_root_admin(), super_admin_email=SUPER_ADMIN_EMAIL,
         initial_section=(request.args.get("section") or "clients"),
         user=current_user(), workspace_name=WORKSPACE_NAME,
-        msg=request.args.get("msg"), **_brand_ctx())
+        msg=request.args.get("msg"), flash_err=(request.args.get("err") == "1"), **_brand_ctx())
 
 
 def _valid_client_key(k):
@@ -1720,7 +1731,7 @@ def admin_account_approve():
     email = request.form.get("email", "").strip()
     account = store.get_account(email)
     if account is None or account.get("status") != "pending":
-        return _atrium_redirect_list("No pending request found for that email.", section="requests")
+        return _atrium_redirect_list("No pending request found for that email.", section="requests", err=True)
     company = account.get("requested_name") or account.get("name") or email.split("@")[0]
     key = _unique_client_key(company)
     import onboard_client  # lazy: reuses brand_for() + starter_workspace()
@@ -1739,7 +1750,7 @@ def admin_account_reject():
     email = request.form.get("email", "").strip()
     removed = store.remove_account(email)
     if not removed:
-        return _atrium_redirect_list("No request to reject for that email.", section="requests")
+        return _atrium_redirect_list("No request to reject for that email.", section="requests", err=True)
     return _atrium_redirect_list("Rejected and removed the access request for %s." % email,
                                  section="requests")
 
@@ -1758,18 +1769,20 @@ def admin_account_create_client():
     password = request.form.get("password", "") or _gen_password()
     domain = email.split("@")[-1] if "@" in email else ""
     if not company:
-        return _atrium_redirect_list("Please enter a company name.", section="create")
+        return _atrium_redirect_list("Please enter a company name.", section="create", err=True)
     if "@" not in email or "." not in domain:
-        return _atrium_redirect_list("Please enter a valid email address.", section="create")
+        return _atrium_redirect_list("Please enter a valid email like name@company.com.",
+                                     section="create", err=True)
     if store.get_account(email) is not None:
-        return _atrium_redirect_list("An account already exists for %s." % email, section="create")
+        return _atrium_redirect_list("An account already exists for %s." % email, section="create", err=True)
     key = _unique_client_key(company)
     import onboard_client  # lazy
     onboard_client.onboard(key, company)            # client + blank workspace
     store.add_account(email, password, name=company, role="client", clients=[key],
                       status="active", requested_name=company)
     return _atrium_redirect_list(
-        "Created client '%s'. Login -> %s / %s" % (key, email, password), section="accounts")
+        "Created client '%s'. The client signs in at /login with  %s / %s  to see their own site. "
+        "Use 'Open site' below to view their workspace." % (key, email, password), section="accounts")
 
 
 @app.route("/admin/accounts/create-admin", methods=["POST"])
@@ -1782,9 +1795,10 @@ def admin_account_create_admin():
     password = request.form.get("password", "") or _gen_password()
     domain = email.split("@")[-1] if "@" in email else ""
     if "@" not in email or "." not in domain:
-        return _atrium_redirect_list("Please enter a valid email address.", section="create")
+        return _atrium_redirect_list("Please enter a valid email like name@company.com.",
+                                     section="create", err=True)
     if store.get_account(email) is not None:
-        return _atrium_redirect_list("An account already exists for %s." % email, section="create")
+        return _atrium_redirect_list("An account already exists for %s." % email, section="create", err=True)
     store.add_account(email, password, name=name or email.split("@")[0], role="admin",
                       clients=["*"], status="active")
     return _atrium_redirect_list(
@@ -1799,13 +1813,13 @@ def admin_account_set_password():
     email = request.form.get("email", "").strip()
     password = request.form.get("password", "")
     if len(password) < 6:
-        return _atrium_redirect_list("New password must be at least 6 characters.", section="accounts")
+        return _atrium_redirect_list("New password must be at least 6 characters.", section="accounts", err=True)
     if not _can_manage_account(email) or not _can_manage_admin_target(email):
-        return _atrium_redirect_list("You can't change that account's password.", section="accounts")
+        return _atrium_redirect_list("You can't change that account's password.", section="accounts", err=True)
     try:
         store.set_account_password(email, password)
     except KeyError:
-        return _atrium_redirect_list("No account found for %s." % email, section="accounts")
+        return _atrium_redirect_list("No account found for %s." % email, section="accounts", err=True)
     return _atrium_redirect_list("Password changed for %s." % email, section="accounts")
 
 
@@ -1816,12 +1830,12 @@ def admin_account_reset_password():
         return Response("Forbidden", status=403, mimetype="text/plain")
     email = request.form.get("email", "").strip()
     if not _can_manage_account(email) or not _can_manage_admin_target(email):
-        return _atrium_redirect_list("You can't reset that account's password.", section="accounts")
+        return _atrium_redirect_list("You can't reset that account's password.", section="accounts", err=True)
     new_pw = _gen_password()
     try:
         store.set_account_password(email, new_pw)
     except KeyError:
-        return _atrium_redirect_list("No account found for %s." % email, section="accounts")
+        return _atrium_redirect_list("No account found for %s." % email, section="accounts", err=True)
     return _atrium_redirect_list("Reset password for %s -> %s" % (email, new_pw), section="accounts")
 
 
@@ -1832,14 +1846,14 @@ def admin_account_delete():
         return Response("Forbidden", status=403, mimetype="text/plain")
     email = request.form.get("email", "").strip()
     if not _can_manage_account(email, allow_self=False):
-        return _atrium_redirect_list("That account can't be deleted here.", section="accounts")
+        return _atrium_redirect_list("That account can't be deleted here.", section="accounts", err=True)
     # Deleting an admin account is a super-admin-only power.
     target = store.get_account(email)
     if target and target.get("role") in ("admin", "superadmin") and not is_root_admin():
-        return _atrium_redirect_list("Only the super admin can remove admin accounts.", section="accounts")
+        return _atrium_redirect_list("Only the super admin can remove admin accounts.", section="accounts", err=True)
     removed = store.remove_account(email)
     if not removed:
-        return _atrium_redirect_list("No account found for %s." % email, section="accounts")
+        return _atrium_redirect_list("No account found for %s." % email, section="accounts", err=True)
     return _atrium_redirect_list("Deleted the account for %s." % email, section="accounts")
 
 
@@ -1850,12 +1864,12 @@ def admin_profile_password():
         return Response("Forbidden", status=403, mimetype="text/plain")
     password = request.form.get("password", "")
     if len(password) < 6:
-        return _atrium_redirect_list("New password must be at least 6 characters.", section="profile")
+        return _atrium_redirect_list("New password must be at least 6 characters.", section="profile", err=True)
     me = current_user()
     if store.get_account(me) is None:
         return _atrium_redirect_list(
             "Your session isn't backed by a stored account (env login), so there's no password to "
-            "change here.", section="profile")
+            "change here.", section="profile", err=True)
     store.set_account_password(me, password)
     return _atrium_redirect_list("Your password was updated.", section="profile")
 

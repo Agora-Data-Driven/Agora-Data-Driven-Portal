@@ -118,6 +118,8 @@ def awaiting_items(ws):
         for item in camp.get("content", []):
             if item.get("status") == "awaiting":
                 out.append({
+                    "id": item.get("id", ""),
+                    "camp_id": camp.get("id", ""),
                     "ref": item.get("ref", item.get("id", "")),
                     "type_tag": item.get("type_tag", ""),
                     "platform": item.get("platform", ""),
