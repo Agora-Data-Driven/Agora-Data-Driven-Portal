@@ -1570,10 +1570,20 @@
 
                 {% if is_superadmin %}
                 <div class="ax-admin-tools" data-contenttools="{{ p.id }}">
-                  <button class="ax-btn admin small" type="button" data-contentedit="{{ p.id }}">Edit details</button>
+                  <button class="ax-btn admin small" type="button" data-modalopen="editcontent-{{ p.id }}">Edit details</button>
                   <button class="ax-btn danger small" type="button" data-contentdelete="{{ p.id }}">Delete</button>
                 </div>
-                <div class="ax-edit-hidden" data-contentform="{{ p.id }}" style="margin-top:10px">
+                {% endif %}
+              </div>
+              {% if collapsible %}</div>{% endif %}
+            </div>
+
+            {% if is_superadmin %}
+            <div class="ax-modal" data-modal="editcontent-{{ p.id }}" hidden>
+              <div class="ax-modal-card">
+                <button class="ax-modal-x" type="button" data-modalclose aria-label="Close">&times;</button>
+                <div data-contentform="{{ p.id }}">
+                  <h3>Edit details</h3>
                   <div class="ax-editrow" style="grid-template-columns:1fr 1fr 1fr">
                     <input class="ax-editbox" data-cf="ref" value="{{ p.ref }}" placeholder="Title Video">
                     {% set types = ['Blog Post','Static Post','Quizzes','Email','Newsletter','Video Edit'] %}
@@ -1597,13 +1607,12 @@
                   </div>
                   <div class="ax-actions">
                     <button class="ax-btn violet small" type="button" data-contentsave="{{ p.id }}">Save details</button>
-                    <button class="ax-btn ghost small" type="button" data-contentcancel="{{ p.id }}">Cancel</button>
+                    <button class="ax-btn ghost small" type="button" data-modalclose>Cancel</button>
                   </div>
                 </div>
-                {% endif %}
               </div>
-              {% if collapsible %}</div>{% endif %}
             </div>
+            {% endif %}
             {% endfor %}
 
             {% if is_superadmin %}
@@ -2927,15 +2936,8 @@
       });
     });
 
-    // --- Content: edit / save / cancel / delete ---
-    qsa("[data-contentedit]").forEach(function (btn) {
-      var form = document.querySelector('[data-contentform="' + aq(btn.getAttribute("data-contentedit")) + '"]');
-      btn.addEventListener("click", function () { toggleHidden(form); });
-    });
-    qsa("[data-contentcancel]").forEach(function (btn) {
-      var form = document.querySelector('[data-contentform="' + aq(btn.getAttribute("data-contentcancel")) + '"]');
-      btn.addEventListener("click", function () { if (form) { form.classList.add("ax-edit-hidden"); } });
-    });
+    // --- Content: save / delete --- (Edit details opens in a modal; open/close
+    // is handled by the shared [data-modalopen]/[data-modalclose] machinery.)
     qsa("[data-contentsave]").forEach(function (btn) {
       var id = btn.getAttribute("data-contentsave");
       var form = document.querySelector('[data-contentform="' + aq(id) + '"]');
