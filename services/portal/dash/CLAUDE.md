@@ -30,6 +30,11 @@ You are in the **`platform-dash`** Cloud Run service: the portal/CRM front-door 
 - **`atrium_health.py`** — the team-only Website Health tab: fetches the client's live site + detects
   installed marketing tags (GTM/GA4/pixels) by scanning the page HTML (no GTM API, infra-free, degrades).
 - **`brand.py`** — bundled palette + AGORA mark (the container can't read repo-root `assets/`).
+- **Google Tag Manager (site-wide, opt-in):** the `_inject_gtm` `after_request` hook in `main.py`
+  injects the GTM container (`<head>` loader + `<body>` `<noscript>`) into **every** portal HTML page
+  when env `GTM_CONTAINER_ID` is set — unset = no tag (so local preview stays untracked). GA4 is
+  configured INSIDE the container in the GTM UI. The container ID ships from `deploy_dash_platform.ps1`
+  (`$GTM_CONTAINER_ID`); reverse-proxied client dashboards (`/d/<c>/`) are skipped.
 
 **Deploy:** `deploy_dash_platform.ps1` (build → `gcloud run deploy platform-dash --no-invoker-iam-check`).
 **Test (off-cloud, what CI runs):** `python _workspace_localtest.py`, `python _accounts_localtest.py`, and `python _atrium_smoketest.py`

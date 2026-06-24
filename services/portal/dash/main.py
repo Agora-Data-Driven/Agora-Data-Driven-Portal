@@ -26,6 +26,7 @@ Org policy forbids public Cloud Run: deploy with --no-invoker-iam-check (never
 
 import datetime
 import os
+import re
 import secrets
 
 import requests
@@ -198,6 +199,58 @@ def _dev_auto_login():
         # (its Profile + admin-account management all resolve to info@agoradatadriven.com).
         session["user"] = SUPER_ADMIN_EMAIL
         session["clients"] = ["*"]
+
+
+# --- Google Tag Manager (GTM) -- site-wide, opt-in via env, injected centrally -------------------
+# Set GTM_CONTAINER_ID=GTM-XXXXXXX on the service to load the container on EVERY portal HTML page;
+# unset (the default) means no tag loads at all (so local preview stays untracked). GA4 is configured
+# INSIDE the container in the GTM UI -- the app only installs the container. Injecting here (one
+# after_request hook) keeps the snippet out of all 7 self-contained templates, so it never touches
+# the esprima JS gate or the "no Jinja in <script>" rule. The proxied client dashboards (/d/<c>/) are
+# deliberately skipped -- they are the clients' OWN sites (which may carry their own GTM).
+# The snippet is Google's standard install, verbatim, with the id substituted at the placeholder.
+_GTM_HEAD = (
+    "<!-- Google Tag Manager -->"
+    "<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':"
+    "new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],"
+    "j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src="
+    "'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);"
+    "})(window,document,'script','dataLayer','__GTM_ID__');</script>"
+    "<!-- End Google Tag Manager -->"
+)
+_GTM_BODY = (
+    "<!-- Google Tag Manager (noscript) -->"
+    "<noscript><iframe src=\"https://www.googletagmanager.com/ns.html?id=__GTM_ID__\""
+    " height=\"0\" width=\"0\" style=\"display:none;visibility:hidden\"></iframe></noscript>"
+    "<!-- End Google Tag Manager (noscript) -->"
+)
+
+
+@app.after_request
+def _inject_gtm(resp):
+    """Inject the GTM container into every portal HTML page when GTM_CONTAINER_ID is set.
+
+    Head snippet goes as high in <head> as possible; the <noscript> goes right after <body>. No-op
+    unless the env var is set, the response is HTML, and it isn't a streamed/proxied response."""
+    gtm_id = os.environ.get("GTM_CONTAINER_ID", "").strip()
+    if not gtm_id or resp.direct_passthrough:
+        return resp
+    if "text/html" not in (resp.content_type or "").lower():
+        return resp
+    if request.path.startswith("/d/"):        # reverse-proxied client dashboards -- not our page
+        return resp
+    try:
+        html = resp.get_data(as_text=True)
+    except (RuntimeError, UnicodeDecodeError):
+        return resp
+    if not html or gtm_id in html:            # idempotent: never inject the same container twice
+        return resp
+    head = _GTM_HEAD.replace("__GTM_ID__", gtm_id)
+    body = _GTM_BODY.replace("__GTM_ID__", gtm_id)
+    html = re.sub(r"<head[^>]*>", lambda m: m.group(0) + head, html, count=1, flags=re.IGNORECASE)
+    html = re.sub(r"<body[^>]*>", lambda m: m.group(0) + body, html, count=1, flags=re.IGNORECASE)
+    resp.set_data(html)
+    return resp
 
 
 def _visible_clients():

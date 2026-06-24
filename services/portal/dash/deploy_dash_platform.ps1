@@ -35,6 +35,11 @@ $BUCKET   = "agora-data-driven-platform-dash"  # PRIVATE registry bucket
 # Cookie domain the portal mints the SSO cookie on (leading dot -> all subdomains).
 $COOKIE_DOMAIN = ".agoradatadriven.com"
 
+# Google Tag Manager container loaded site-wide on every portal HTML page (GA4 is configured INSIDE
+# this container in the GTM UI). Set to "" to ship with GTM OFF; the app injects nothing unless this
+# is non-empty. Local preview never runs this script, so it stays untracked.
+$GTM_CONTAINER_ID = "GTM-KKWX37RG"
+
 # Secrets mounted as env vars (Secret Manager, :latest). Created by deploy.ps1.
 $SESSION_SECRET = "platform-dash-session-key"
 $SSO_SECRET     = "platform-sso-key"
@@ -90,6 +95,10 @@ if (-not $SkipBuild) {
 #   --no-invoker-iam-check instead; the Flask app does its OWN password/SSO auth in
 #   process, and the private registry JSON is only ever read behind the portal login.
 # =============================================================================
+# Assemble the env-var list; only ship GTM_CONTAINER_ID when it's set (empty -> GTM stays off).
+$ENV_VARS = "COOKIE_DOMAIN=$COOKIE_DOMAIN,REGISTRY_BUCKET=$BUCKET,REGISTRY_OBJECT=platform.json"
+if (-not [string]::IsNullOrWhiteSpace($GTM_CONTAINER_ID)) { $ENV_VARS += ",GTM_CONTAINER_ID=$GTM_CONTAINER_ID" }
+
 Write-Host "[..] Deploying Cloud Run service $PLATFORM" -ForegroundColor Cyan
 gcloud run deploy $PLATFORM `
     --image $IMG `
@@ -97,7 +106,7 @@ gcloud run deploy $PLATFORM `
     --project $PROJECT `
     --service-account $WEB_SA `
     --no-invoker-iam-check `
-    --update-env-vars "COOKIE_DOMAIN=$COOKIE_DOMAIN,REGISTRY_BUCKET=$BUCKET,REGISTRY_OBJECT=platform.json" `
+    --update-env-vars $ENV_VARS `
     --update-secrets "SESSION_SECRET=${SESSION_SECRET}:latest,SSO_SECRET=${SSO_SECRET}:latest"
 Must "deploy Cloud Run service $PLATFORM"
 Write-Host "[OK] deployed $PLATFORM (tag $SHA)" -ForegroundColor Green
