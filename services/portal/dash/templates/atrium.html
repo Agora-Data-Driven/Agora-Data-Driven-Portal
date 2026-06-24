@@ -1996,6 +1996,26 @@
         {% set wh = ws.website_health or {} %}
         {% set lc = wh.last_check %}
         <section class="ax-pane {{ 'is-active' if view.active_tab=='website-health' else '' }}" data-pane="website-health">
+          <!-- Google Tag Manager -->
+          <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+          new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+          j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+          'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+          })(window,document,'script','dataLayer','GTM-KKWX37RG');</script>
+          <!-- End Google Tag Manager -->
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KKWX37RG"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          <!-- Google tag (gtag.js) -->
+          <script async src="https://www.googletagmanager.com/gtag/js?id=G-MEC39SD35R"></script>
+          <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-MEC39SD35R');
+          </script>
+          <!-- End Google tag (gtag.js) -->
           <h1 class="ax-greet">Website Health</h1>
           <p class="ax-lede">Monitor {{ ws.display_name }}'s live website &mdash; confirm it's online with no errors, and see the Google Tag Manager containers and marketing tags installed on it.{% if not can_edit_health %} <strong>View only</strong> &mdash; a super admin runs the checks.{% endif %}</p>
 
