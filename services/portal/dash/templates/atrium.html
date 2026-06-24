@@ -1602,9 +1602,11 @@
                 </div>
                 {% endif %}
 
+                {% if is_superadmin %}
                 <div data-noteslot>
                   <textarea class="ax-noteinput" data-note data-saved="{{ p.client_note }}" placeholder="＋ Add notes…">{{ p.client_note }}</textarea>
                 </div>
+                {% endif %}
 
                 <div data-actionslot>
                   <div class="ax-actions">
