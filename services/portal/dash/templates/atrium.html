@@ -37,6 +37,7 @@
 {%- elif name == 'menu' -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3.5" y1="6" x2="20.5" y2="6"/><line x1="3.5" y1="12" x2="20.5" y2="12"/><line x1="3.5" y1="18" x2="20.5" y2="18"/></svg>
 {%- elif name == 'file' -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h8L19 7v14.5H6z"/><path d="M14 2.5V7h4"/></svg>
 {%- elif name == 'download' -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 20.5h14"/></svg>
+{%- elif name == 'health' -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h4l1.6-3.5L12 16l1.8-4 1.2 0h4.5"/></svg>
 {%- else -%}<svg class="ax-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/></svg>
 {%- endif -%}
 {%- endmacro %}
@@ -74,7 +75,7 @@
 {%- else -%}<a class="ax-shot-media ax-shot-file" href="{{ s.url }}?dl=1" target="_blank" rel="noopener noreferrer" download title="Download {{ s.name or 'file' }}">{{ ic('file') }}<span class="ax-shot-file-name">{{ s.name or 'Download file' }}</span></a>
 {%- endif -%}
 {%- endmacro %}
-{% set tab_titles = {'overview':'Overview','dashboard':'Dashboard','leadgen':'Lead Generation','organic':'Organic Content','calendar':'Content Calendar','conversations':'Client Communications','settings':'Notification settings'} %}
+{% set tab_titles = {'overview':'Overview','dashboard':'Dashboard','leadgen':'Lead Generation','organic':'Organic Content','calendar':'Content Calendar','conversations':'Client Communications','settings':'Notification settings','website-health':'Website Health'} %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -948,6 +949,57 @@
       .ax-cal-month.is-side .ax-cal-cell { min-height: 40px; }
       .ax-hero-val { font-size: 32px; }
     }
+
+    /* ---- Website Health (team-only tab) ------------------------------------------------------ */
+    .ax-nav a.ax-nav-team { margin-top: 8px; border-top: 1px dashed var(--ax-line); padding-top: 12px; }
+    .ax-wh-card { margin-bottom: 16px; }
+    .ax-wh-urlrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .ax-wh-globe { color: var(--ax-green); display: inline-flex; }
+    .ax-wh-globe .ax-ic { width: 22px; height: 22px; }
+    .ax-wh-url { flex: 1 1 280px; min-width: 200px; }
+    .ax-wh-urlview { flex: 1 1 280px; font-weight: 600; color: var(--ax-ink); word-break: break-all; }
+    .ax-wh-urlview a { color: var(--ax-deep, #5C4BD0); }
+    .ax-wh-status { margin-bottom: 16px; border-left: 4px solid var(--ax-line); }
+    .ax-wh-status.is-ok { border-left-color: var(--ax-green); }
+    .ax-wh-status.is-bad { border-left-color: #E5413E; }
+    .ax-wh-statehead { display: flex; align-items: flex-start; gap: 12px; }
+    .ax-wh-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; flex: 0 0 auto; background: #C9CED9; }
+    .ax-wh-status.is-ok .ax-wh-dot { background: var(--ax-green); box-shadow: 0 0 0 4px rgba(79,171,74,.18); }
+    .ax-wh-status.is-bad .ax-wh-dot { background: #E5413E; box-shadow: 0 0 0 4px rgba(229,65,62,.18); }
+    .ax-wh-state { font-size: 18px; font-weight: 800; color: var(--ax-ink); }
+    .ax-wh-title { font-weight: 600; color: var(--ax-sub); }
+    .ax-wh-when { font-size: 12.5px; color: var(--ax-sub); margin-top: 2px; word-break: break-all; }
+    .ax-wh-when a { color: var(--ax-deep, #5C4BD0); }
+    .ax-wh-cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+    .ax-wh-cell { background: var(--ax-canvas); border: 1px solid var(--ax-line); border-radius: 12px; padding: 12px; text-align: center; }
+    .ax-wh-cv { font-size: 20px; font-weight: 800; color: var(--ax-ink); }
+    .ax-wh-cl { font-size: 11.5px; color: var(--ax-sub); margin-top: 3px; text-transform: uppercase; letter-spacing: .4px; }
+    .ax-wh-h { font-size: 15px; font-weight: 800; color: var(--ax-ink); margin: 0 0 10px; }
+    .ax-wh-note, .ax-wh-noteview { font-size: 13px; color: var(--ax-sub); margin: 0 0 12px; }
+    .ax-wh-noteview { white-space: pre-wrap; }
+    .ax-wh-issues { display: flex; flex-direction: column; gap: 8px; }
+    .ax-wh-issue { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; padding: 9px 12px; border-radius: 10px; background: var(--ax-canvas); border: 1px solid var(--ax-line); }
+    .ax-wh-issue .ax-wh-iled { flex: 0 0 auto; display: inline-flex; }
+    .ax-wh-issue .ax-ic { width: 17px; height: 17px; }
+    .ax-wh-issue.lvl-ok { background: rgba(79,171,74,.10); border-color: rgba(79,171,74,.32); color: #2f7a2c; }
+    .ax-wh-issue.lvl-info { background: rgba(92,75,208,.08); border-color: rgba(92,75,208,.28); color: #4a3db0; }
+    .ax-wh-issue.lvl-warn { background: rgba(214,158,46,.12); border-color: rgba(214,158,46,.38); color: #8a6400; }
+    .ax-wh-issue.lvl-error { background: rgba(229,65,62,.10); border-color: rgba(229,65,62,.34); color: #c0322f; }
+    .ax-wh-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ax-wh-tag { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--ax-canvas); border: 1px solid var(--ax-line); }
+    .ax-wh-tagchip { font-size: 12.5px; font-weight: 700; color: var(--ax-ink); }
+    .ax-wh-tagid { font-size: 11.5px; color: var(--ax-sub); background: #fff; border: 1px solid var(--ax-line); border-radius: 6px; padding: 1px 6px; }
+    .ax-wh-tag.type-gtm .ax-wh-tagchip { color: #2f7a2c; }
+    .ax-wh-tag.type-meta .ax-wh-tagchip { color: #1877F2; }
+    .ax-wh-none { font-size: 13.5px; color: var(--ax-sub); margin: 0; }
+    .ax-wh-gtm { margin-top: 14px; font-size: 13px; color: var(--ax-sub); }
+    .ax-wh-gtm code, .ax-wh-gtmlbl + code { margin-right: 6px; }
+    .ax-wh-gtm code { background: var(--ax-canvas); border: 1px solid var(--ax-line); border-radius: 6px; padding: 2px 7px; font-weight: 700; color: var(--ax-ink); }
+    .ax-wh-gtmlbl { font-weight: 700; color: var(--ax-ink); margin-right: 6px; }
+    .ax-wh-empty { display: flex; align-items: center; gap: 14px; color: var(--ax-sub); font-size: 14px; }
+    .ax-wh-empty .ax-ic { width: 30px; height: 30px; color: var(--ax-green); flex: 0 0 auto; }
+    .ax-wh-notes { width: 100%; box-sizing: border-box; }
+    @media (max-width: 560px) { .ax-wh-cells { grid-template-columns: repeat(2, 1fr); } }
   </style>
 </head>
 <body>
@@ -975,6 +1027,12 @@
           {% endif %}
         </a>
         {% endfor %}
+        {#- Website Health: a TEAM-ONLY tab (admins + super-admins). Hidden from clients entirely. -#}
+        {% if is_superadmin %}
+        <a href="{{ '/w/' ~ view.client ~ '/website-health' }}" data-tab="website-health" class="ax-nav-team {{ 'is-active' if view.active_tab == 'website-health' else '' }}">
+          {{ ic('health') }}<span>Website Health</span>
+        </a>
+        {% endif %}
       </nav>
 
       <div class="ax-side-card">
@@ -1933,6 +1991,93 @@
         </section>
 
         <!-- ============ NOTIFICATION SETTINGS ============ -->
+        <!-- ============ WEBSITE HEALTH (team-only: admins see it, super admin edits) ============ -->
+        {% if is_superadmin %}
+        {% set wh = ws.website_health or {} %}
+        {% set lc = wh.last_check %}
+        <section class="ax-pane {{ 'is-active' if view.active_tab=='website-health' else '' }}" data-pane="website-health">
+          <h1 class="ax-greet">Website Health</h1>
+          <p class="ax-lede">Monitor {{ ws.display_name }}'s live website &mdash; confirm it's online with no errors, and see the Google Tag Manager containers and marketing tags installed on it.{% if not can_edit_health %} <strong>View only</strong> &mdash; a super admin runs the checks.{% endif %}</p>
+
+          <div class="ax-panel ax-wh-card">
+            <div class="ax-wh-urlrow">
+              <span class="ax-wh-globe">{{ ic('health') }}</span>
+              {% if can_edit_health %}
+              <input class="ax-editbox ax-wh-url" id="ax-wh-url" type="url" inputmode="url" placeholder="https://clientwebsite.com" value="{{ wh.url }}">
+              <button class="ax-btn" id="ax-wh-save" type="button">Save URL</button>
+              <button class="ax-btn violet" id="ax-wh-check" type="button">Run health check</button>
+              {% else %}
+              <div class="ax-wh-urlview">{% if wh.url %}<a href="{{ wh.url }}" target="_blank" rel="noopener noreferrer">{{ wh.url }}</a>{% else %}No website set yet.{% endif %}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if lc %}
+          <div class="ax-panel ax-wh-status {{ 'is-ok' if lc.ok else 'is-bad' }}">
+            <div class="ax-wh-statehead">
+              <span class="ax-wh-dot"></span>
+              <div class="ax-wh-statetext">
+                <div class="ax-wh-state">{{ 'Online' if lc.ok else 'Problem detected' }}{% if lc.page_title %} &middot; <span class="ax-wh-title">{{ lc.page_title }}</span>{% endif %}</div>
+                <div class="ax-wh-when">Checked {{ lc.checked_at|atrium_dt }}{% if lc.final_url %} &middot; <a href="{{ lc.final_url }}" target="_blank" rel="noopener noreferrer">{{ lc.final_url }}</a>{% endif %}</div>
+              </div>
+            </div>
+            <div class="ax-wh-cells">
+              <div class="ax-wh-cell"><div class="ax-wh-cv">{{ lc.status_code if lc.status_code is not none else '—' }}</div><div class="ax-wh-cl">HTTP status</div></div>
+              <div class="ax-wh-cell"><div class="ax-wh-cv">{% if lc.response_ms is not none %}{{ lc.response_ms }} ms{% else %}—{% endif %}</div><div class="ax-wh-cl">Response</div></div>
+              <div class="ax-wh-cell"><div class="ax-wh-cv">{{ 'Yes' if lc.https else 'No' }}</div><div class="ax-wh-cl">HTTPS</div></div>
+              <div class="ax-wh-cell"><div class="ax-wh-cv">{{ lc.tag_count }}</div><div class="ax-wh-cl">Tags found</div></div>
+            </div>
+          </div>
+
+          {% if lc.issues %}
+          <div class="ax-panel">
+            <h2 class="ax-wh-h">Checks</h2>
+            <div class="ax-wh-issues">
+              {% for iss in lc.issues %}
+              <div class="ax-wh-issue lvl-{{ iss.level }}"><span class="ax-wh-iled">{{ ic('check') if iss.level in ('ok','info') else ic('bell') }}</span><span>{{ iss.text }}</span></div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="ax-panel">
+            <h2 class="ax-wh-h">Tags &amp; tracking detected</h2>
+            <p class="ax-wh-note">Scanned from the live page &mdash; this is everything that actually loads on the site (Google Tag Manager, Analytics, ad pixels, and more).</p>
+            {% if lc.tags %}
+            <div class="ax-wh-tags">
+              {% for t in lc.tags %}
+              <div class="ax-wh-tag type-{{ t.type }}">
+                <span class="ax-wh-tagchip">{{ t.label }}</span>
+                {% if t.id %}<code class="ax-wh-tagid">{{ t.id }}</code>{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p class="ax-wh-none">No marketing or analytics tags were detected on the page.</p>
+            {% endif %}
+            {% if lc.gtm %}
+            <div class="ax-wh-gtm"><span class="ax-wh-gtmlbl">Google Tag Manager container{{ 's' if lc.gtm|length > 1 else '' }}:</span> {% for g in lc.gtm %}<code>{{ g }}</code>{% endfor %}</div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="ax-panel ax-wh-empty">
+            {{ ic('health') }}
+            <div>No health check has been run yet.{% if can_edit_health %} Enter the website URL above and click <strong>Run health check</strong>.{% else %} A super admin needs to run the first check.{% endif %}</div>
+          </div>
+          {% endif %}
+
+          <div class="ax-panel">
+            <h2 class="ax-wh-h">Notes</h2>
+            {% if can_edit_health %}
+            <textarea class="ax-editbox ax-wh-notes" id="ax-wh-notes" rows="3" placeholder="Internal notes about this site's tracking setup…">{{ wh.notes }}</textarea>
+            <div class="ax-actions" style="margin-top:10px"><button class="ax-btn" id="ax-wh-savenotes" type="button">Save notes</button></div>
+            {% else %}
+            <p class="ax-wh-noteview">{{ wh.notes or 'No notes yet.' }}</p>
+            {% endif %}
+          </div>
+        </section>
+        {% endif %}
+
         <section class="ax-pane {{ 'is-active' if view.active_tab=='settings' else '' }}" data-pane="settings">
           <h1 class="ax-greet">Notification settings</h1>
           <p class="ax-lede">Choose what AGORA emails you about. Everything still appears here in your workspace either way.</p>
@@ -2043,7 +2188,8 @@
   var titles = {
     overview: "Overview", dashboard: "Dashboard", leadgen: "Lead Generation",
     organic: "Organic Content", calendar: "Content Calendar",
-    conversations: "Client Communications", settings: "Notification settings"
+    conversations: "Client Communications", settings: "Notification settings",
+    "website-health": "Website Health"
   };
   // Looker Studio embed: scale the fixed-canvas report to fill the container width (runs for ALL
   // users, not just admins). The report has a fixed native canvas (data-native-w/h); a 100%-width
@@ -2240,6 +2386,53 @@
         if (btn) { btn.removeAttribute("disabled"); }
       });
   }
+
+  // ---- Website Health (team-only tab): save URL, run a check, save notes -----------------------
+  // Edit controls render only for THE super admin (can_edit_health). Save URL / Save notes reuse
+  // adminAction (POST -> reload). Run check POSTs, then reloads so the freshly-stored result renders
+  // server-side (no Jinja in this script). A missing-url result (ok:false) surfaces its message.
+  (function () {
+    function whUrl() {
+      var el = document.getElementById("ax-wh-url");
+      return el ? el.value.replace(/^\s+|\s+$/g, "") : "";
+    }
+    var saveBtn = document.getElementById("ax-wh-save");
+    if (saveBtn) {
+      saveBtn.addEventListener("click", function () {
+        adminAction("/admin/website-health/save", { url: whUrl() }, saveBtn);
+      });
+    }
+    var notesBtn = document.getElementById("ax-wh-savenotes");
+    if (notesBtn) {
+      notesBtn.addEventListener("click", function () {
+        var ta = document.getElementById("ax-wh-notes");
+        adminAction("/admin/website-health/save", { notes: ta ? ta.value : "" }, notesBtn);
+      });
+    }
+    var checkBtn = document.getElementById("ax-wh-check");
+    if (checkBtn) {
+      checkBtn.addEventListener("click", function () {
+        var label = checkBtn.innerHTML;
+        checkBtn.setAttribute("disabled", "disabled");
+        checkBtn.textContent = "Checking…";
+        post("/admin/website-health/check", { url: whUrl() })
+          .then(function (data) {
+            if (data && data.ok === false) {
+              checkBtn.removeAttribute("disabled");
+              checkBtn.innerHTML = label;
+              adminMsg(data.message || "Could not run the check.", false);
+              return;
+            }
+            window.location.reload();
+          })
+          .catch(function () {
+            checkBtn.removeAttribute("disabled");
+            checkBtn.innerHTML = label;
+            adminMsg("Could not run the check. Please try again.", false);
+          });
+      });
+    }
+  })();
 
   // ---- Client crest: upload / change the workspace logo in place (any member, no reload) -------
   // The side-panel logo is a <label> wrapping a hidden file input, so a click opens the picker. On a
@@ -2456,6 +2649,11 @@
     var block = document.querySelector('[data-campblock][data-campid="' + aq(id) + '"]');
     if (!block) { return; }
     showCampaign(block.getAttribute("data-campblock"), id);
+    // After focusing the campaign, scroll to its content so the freshly added piece is in view
+    // (otherwise the reload lands at the top of the tab and the new content is below the fold).
+    if (block.scrollIntoView) {
+      window.setTimeout(function () { block.scrollIntoView({ block: "start" }); }, 0);
+    }
   })();
 
   // ---- Conversations: thread switch + send --------------------------------
@@ -2588,6 +2786,9 @@
     var btns = qsa("[data-comsend]", wrap);
     function setDisabled(v) { btns.forEach(function (b) { if (v) { b.setAttribute("disabled", "disabled"); } else { b.removeAttribute("disabled"); } }); }
     function appendComment(text, kind, comId) {
+      // The live poller may have already rendered this comment from the server in the gap between the
+      // POST returning and this optimistic append — never paint it twice.
+      if (comId && list && list.querySelector('[data-comid="' + aq(comId) + '"]')) { return; }
       var el = document.createElement("div");
       el.className = (isAdmin ? "ax-com agora" : "ax-com client") + (kind === "changes" ? " changes" : "");
       if (comId) { el.setAttribute("data-comid", comId); }
@@ -2643,6 +2844,119 @@
       });
     }
   });
+
+  // ---- Live updates: poll the workspace state so comments / request-changes / resolves / approvals
+  // from the OTHER side appear without a reload. No websocket/pub-sub (single JSON in GCS, multi-
+  // instance Cloud Run) -- we just re-read the authoritative state every few seconds and reconcile
+  // the comment threads + status pills in place. Only runs on tabs that actually have a thread.
+  (function () {
+    if (!document.querySelector("[data-comments]")) { return; }
+
+    // Build a comment bubble from a server record (mirrors the Jinja markup + appendComment, but
+    // driven by the server's sender/sender_name/when so the OTHER party's comment reads correctly).
+    function buildComment(c) {
+      var el = document.createElement("div");
+      var cls = "ax-com " + (c.sender === "agora" ? "agora" : "client");
+      if (c.kind === "changes") { cls += " changes"; }
+      if (c.resolved) { cls += " resolved"; }
+      el.className = cls;
+      if (c.id) { el.setAttribute("data-comid", c.id); }
+      if (c.kind === "changes") {
+        var flag = document.createElement("div"); flag.className = "ax-com-flag";
+        flag.textContent = "Request changes";
+        if (c.resolved) {
+          var done = document.createElement("span"); done.className = "ax-com-done";
+          done.textContent = " · Resolved"; flag.appendChild(done);
+        }
+        el.appendChild(flag);
+      }
+      var who = document.createElement("div"); who.className = "ax-com-who";
+      who.textContent = (c.sender_name || "") + (c.sender === "agora" ? " · AGORA" : "");
+      el.appendChild(who);
+      el.appendChild(document.createTextNode(c.body || ""));
+      var when = document.createElement("div"); when.className = "ax-com-when";
+      when.textContent = c.when || ""; el.appendChild(when);
+      // Team-only affordances, exactly as the template renders them for super-admins.
+      if (isAdmin && c.kind === "changes" && c.id) {
+        var rw = document.createElement("div"); rw.className = "ax-com-resolve";
+        rw.setAttribute("data-comresolvewrap", ""); if (c.resolved) { rw.hidden = true; }
+        var rb = document.createElement("button"); rb.className = "ax-btn ghost small"; rb.type = "button";
+        rb.setAttribute("data-comresolve", c.id); rb.textContent = "Resolve";
+        rw.appendChild(rb); el.appendChild(rw); wireResolve(rb);
+      }
+      if (isAdmin && c.id) {
+        var dw = document.createElement("div"); dw.className = "ax-com-del";
+        var db = document.createElement("button"); db.className = "ax-btn danger small"; db.type = "button";
+        db.setAttribute("data-comdelete", c.id); db.textContent = "Delete";
+        dw.appendChild(db); el.appendChild(dw); wireDelete(db);
+      }
+      return el;
+    }
+
+    // Bring an already-rendered changes bubble's resolved state in line with the server.
+    function syncResolved(el, resolved) {
+      var isRes = el.classList.contains("resolved");
+      if (resolved && !isRes) {
+        el.classList.add("resolved");
+        var flag = el.querySelector(".ax-com-flag");
+        if (flag && flag.textContent.indexOf("Resolved") < 0) {
+          var d = document.createElement("span"); d.className = "ax-com-done";
+          d.textContent = " · Resolved"; flag.appendChild(d);
+        }
+        var wrap = el.querySelector("[data-comresolvewrap]"); if (wrap) { wrap.hidden = true; }
+      } else if (!resolved && isRes) {
+        el.classList.remove("resolved");
+        var doneEl = el.querySelector(".ax-com-done");
+        if (doneEl && doneEl.parentNode) { doneEl.parentNode.removeChild(doneEl); }
+        var wrap2 = el.querySelector("[data-comresolvewrap]"); if (wrap2) { wrap2.hidden = false; }
+      }
+    }
+
+    function reconcile(cid, st) {
+      var card = document.querySelector('[data-content="' + aq(cid) + '"]');
+      if (!card) { return; }
+      if (st.status && st.status !== card.getAttribute("data-status")) {
+        setCardStatus(card, st.status);
+        card.setAttribute("data-status", st.status);   // keep the status-filter chips in sync
+      }
+      var box = card.querySelector("[data-comments]");
+      var list = box ? box.querySelector("[data-comlist]") : null;
+      if (!list) { return; }
+      var server = (st.comments && st.comments.length) ? st.comments : [];
+      var keep = {};
+      server.forEach(function (c) { if (c.id) { keep[c.id] = c; } });
+      // Drop bubbles the other side deleted (only ones carrying a tracked id).
+      qsa("[data-comid]", list).forEach(function (el) {
+        var id = el.getAttribute("data-comid");
+        if (id && !keep[id]) { if (el.parentNode) { el.parentNode.removeChild(el); } }
+      });
+      // Append anything new (in server order); sync resolved state on changes bubbles we already show.
+      server.forEach(function (c) {
+        if (!c.id) { return; }
+        var existing = list.querySelector('[data-comid="' + aq(c.id) + '"]');
+        if (!existing) { list.appendChild(buildComment(c)); }
+        else if (c.kind === "changes") { syncResolved(existing, !!c.resolved); }
+      });
+    }
+
+    var inFlight = false;
+    function poll() {
+      if (inFlight || document.hidden) { return; }
+      inFlight = true;
+      fetch(base + "/state.json", { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          inFlight = false;
+          if (!data || !data.content) { return; }
+          var content = data.content;
+          Object.keys(content).forEach(function (cid) { reconcile(cid, content[cid]); });
+        })
+        .catch(function () { inFlight = false; });
+    }
+    window.setInterval(poll, 6000);
+    // Catch up immediately when the user returns to the tab (rather than waiting out the interval).
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) { poll(); } });
+  })();
 
   // ---- Notification settings ----------------------------------------------
   var masterEl = document.querySelector('[data-pref="master"]');
@@ -3082,6 +3396,10 @@
         }
         btn.setAttribute("disabled", "disabled");
         if (hasFiles) { adminMsg("Adding content and uploading files…", true); }
+        // Stay on THIS campaign after the reload. A blind reload defaults back to the first
+        // campaign in the channel, so the newly added piece would appear to land elsewhere
+        // (the on-load "#camp-<id>" handler re-focuses this campaign). Mirrors Add campaign.
+        if (id) { window.location.hash = "camp-" + id; }
         // Create the content first, then attach the chosen files to its new id before reloading.
         post("/admin/content", fields)
           .then(function (data) {

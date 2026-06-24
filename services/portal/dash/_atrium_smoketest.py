@@ -137,6 +137,18 @@ def run():
     _check("client comment persisted (sender client)",
            c017["comments"][-1]["body"] == "Add a guest quote?" and c017["comments"][-1]["sender"] == "client")
 
+    # Live-state endpoint (drives the no-reload polling): exposes per-content status + comments.
+    r = c.get("/w/%s/state.json" % CLIENT)
+    sj = r.get_json() if r.status_code == 200 else {}
+    _check("state.json returns ok", r.status_code == 200 and sj.get("ok") is True)
+    _st017 = (sj.get("content", {}) or {}).get("RVR-017", {})
+    _check("state.json carries status + the new comment",
+           _st017.get("status") == "changes"
+           and any(cm.get("body") == "Add a guest quote?" and cm.get("sender") == "client"
+                   for cm in _st017.get("comments", [])))
+    _check("state.json gated (logged-out 401/403)",
+           main.app.test_client().get("/w/%s/state.json" % CLIENT).status_code in (401, 403))
+
     # Save a note silently.
     _check("save-note ok",
            c.post("/w/%s/save-note" % CLIENT, data={"content_id": "RVR-014", "note": "Nice"}).status_code == 200)
@@ -404,6 +416,81 @@ def run():
                data={"conversation_id": "cv_1", "body": "Inline team reply.", "resolve": "1"})
     _check("inline reply ok + resolved",
            r.status_code == 200 and r.get_json().get("status") == "resolved")
+
+    # ---- Website Health (team-only tab: admins see it, THE super admin edits) --------------------
+    import atrium_health   # noqa: E402
+    # Pure tag detection: GTM container + GA4 + Meta pixel are recognised straight from page markup.
+    _sample = ('<title>Demo</title>'
+               '<script src="https://www.googletagmanager.com/gtm.js?id=GTM-ABC1234"></script>'
+               'gtag("config","G-ABCDE12345"); fbq("init","123456789012345");')
+    _types = set(t["type"] for t in atrium_health.detect_tags(_sample))
+    _check("detect_tags finds GTM + GA4 + Meta", {"gtm", "ga4", "meta"} <= _types)
+    _check("detect_tags captures the GTM container id",
+           any(t["id"] == "GTM-ABC1234" for t in atrium_health.detect_tags(_sample)))
+    # check_website never raises on a dead site (injected fetcher raises) -> graceful ok:false result.
+    def _boom(url, timeout):
+        raise RuntimeError("getaddrinfo failed")
+    _dead = atrium_health.check_website("nope.invalid", fetcher=_boom)
+    _check("check_website degrades on a dead site", _dead["ok"] is False and bool(_dead["error"]))
+
+    # Patch the live check so the ROUTE uses a canned result (no real network in the smoke test).
+    def _fake_check(url, timeout=10, fetcher=None):
+        return {"url": "https://riverdanceresort.com", "input_url": url,
+                "checked_at": workspace.now_iso(), "ok": True, "status_code": 200,
+                "final_url": "https://riverdanceresort.com", "redirected": False, "https": True,
+                "response_ms": 120, "page_title": "Riverdance", "error": "",
+                "tags": [{"type": "gtm", "label": "Google Tag Manager", "id": "GTM-RVR123"}],
+                "tag_count": 1, "gtm": ["GTM-RVR123"],
+                "issues": [{"level": "ok", "text": "Site is online and tags were detected — no problems found."}]}
+    atrium_health.check_website = _fake_check
+
+    with c.session_transaction() as s:
+        s.update(SUPER)
+    wh = c.get("/w/%s/website-health" % CLIENT).get_data(as_text=True)
+    _check("website-health pane renders for super-admin",
+           'data-pane="website-health"' in wh and "Website Health" in wh)
+    _check("website-health nav link present for team", 'data-tab="website-health"' in wh)
+    _check("super admin gets the editable URL input", 'id="ax-wh-url"' in wh)
+    r = c.post("/w/%s/admin/website-health/save" % CLIENT, data={"url": "riverdanceresort.com"})
+    _check("save website url ok", r.status_code == 200 and r.get_json().get("ok") is True)
+    _check("website url persisted",
+           workspace.load_workspace(CLIENT).get("website_health", {}).get("url") == "riverdanceresort.com")
+    r = c.post("/w/%s/admin/website-health/check" % CLIENT, data={"url": "riverdanceresort.com"})
+    _check("run health check ok + result stored",
+           r.status_code == 200 and r.get_json().get("ok") is True
+           and workspace.load_workspace(CLIENT)["website_health"]["last_check"]["gtm"] == ["GTM-RVR123"])
+    _check("check result renders (status + GTM container)",
+           "GTM-RVR123" in c.get("/w/%s/website-health" % CLIENT).get_data(as_text=True))
+    # Running the check normalised + stored the url (https://...); saving notes must NOT clobber it.
+    r = c.post("/w/%s/admin/website-health/save" % CLIENT, data={"notes": "Pixel verified."})
+    _check("save notes ok + does not clobber the url",
+           r.status_code == 200
+           and workspace.load_workspace(CLIENT)["website_health"]["url"] == "https://riverdanceresort.com"
+           and workspace.load_workspace(CLIENT)["website_health"]["notes"] == "Pixel verified.")
+
+    # An ADMIN who is NOT the root super admin: SEES the tab but it is READ-ONLY, and every edit route
+    # is forbidden ("the admin can just see it").
+    with c.session_transaction() as s:
+        s.update({"ok": True, "user": "staff@agoradatadriven.com", "clients": ["*"]})
+    ap = c.get("/w/%s/website-health" % CLIENT).get_data(as_text=True)
+    _check("non-root admin sees the Website Health tab", 'data-pane="website-health"' in ap)
+    _check("non-root admin view is read-only (no URL editor)", 'id="ax-wh-url"' not in ap)
+    _check("non-root admin still sees the stored result", "GTM-RVR123" in ap)
+    for path in ("save", "check"):
+        _check("website-health/%s forbidden for non-root admin" % path,
+               c.post("/w/%s/admin/website-health/%s" % (CLIENT, path), data={}).status_code == 403)
+
+    # A CLIENT never sees the tab and cannot hit its routes.
+    with c.session_transaction() as s:
+        s.update({"ok": True, "user": "owner@riverdanceresort.com", "clients": [CLIENT]})
+    cp = c.get("/w/%s/website-health" % CLIENT).get_data(as_text=True)
+    _check("client never sees the Website Health nav/pane",
+           'data-tab="website-health"' not in cp and 'data-pane="website-health"' not in cp)
+    for path in ("save", "check"):
+        _check("website-health/%s forbidden for client" % path,
+               c.post("/w/%s/admin/website-health/%s" % (CLIENT, path), data={}).status_code == 403)
+    with c.session_transaction() as s:
+        s.update(SUPER)
 
     # A non-super-admin grantee can open the workspace but is FORBIDDEN on every admin route.
     with c.session_transaction() as s:

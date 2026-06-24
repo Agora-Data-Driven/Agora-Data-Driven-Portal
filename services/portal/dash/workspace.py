@@ -173,6 +173,38 @@ def set_client_logo(client, logo_markup):
     return _mutate(client, fn)
 
 
+# --- Website Health (team-only tab: site monitoring + tag detection) -----------------------------
+# All state lives under one key, ws["website_health"] = {url, notes, last_check}. The last_check dict
+# is the render-ready result from atrium_health.check_website (kept verbatim so the tab renders it).
+def set_website_url(client, url):
+    """Set the monitored website URL for the Website Health tab. Returns the stored url."""
+    def fn(ws):
+        wh = ws.setdefault("website_health", {})
+        wh["url"] = (url or "").strip()
+        return wh["url"]
+    return _mutate(client, fn)
+
+
+def set_website_notes(client, notes):
+    """Set the team's free-text notes shown on the Website Health tab. Returns the stored notes."""
+    def fn(ws):
+        wh = ws.setdefault("website_health", {})
+        wh["notes"] = notes or ""
+        return wh["notes"]
+    return _mutate(client, fn)
+
+
+def save_website_check(client, result):
+    """Store the latest health-check result (and the url it ran against). Returns the result."""
+    def fn(ws):
+        wh = ws.setdefault("website_health", {})
+        if (result or {}).get("url"):
+            wh["url"] = result["url"]
+        wh["last_check"] = result or {}
+        return wh["last_check"]
+    return _mutate(client, fn)
+
+
 # --- Uploaded creatives (binary objects in the SAME private bucket) -----------------------------
 # A creative the team uploads for a content piece is stored as its OWN object alongside the
 # workspace JSON (so a multi-KB image never bloats workspace/<c>.json, which is rewritten in full on

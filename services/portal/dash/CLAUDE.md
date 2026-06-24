@@ -27,6 +27,8 @@ You are in the **`platform-dash`** Cloud Run service: the portal/CRM front-door 
 - **`templates/*.html`** — big self-contained pages. Inline JS must be **esprima-4.x-safe** (no `?.`
   / `??`; classic `&&`/`||`). No Jinja inside `<script>` — JS reads state from the DOM.
 - **`atrium_docs.py` / `feedback_ai.py`** — the opt-in Google-Doc → AI strategy feature (gated, degrades).
+- **`atrium_health.py`** — the team-only Website Health tab: fetches the client's live site + detects
+  installed marketing tags (GTM/GA4/pixels) by scanning the page HTML (no GTM API, infra-free, degrades).
 - **`brand.py`** — bundled palette + AGORA mark (the container can't read repo-root `assets/`).
 
 **Deploy:** `deploy_dash_platform.ps1` (build → `gcloud run deploy platform-dash --no-invoker-iam-check`).

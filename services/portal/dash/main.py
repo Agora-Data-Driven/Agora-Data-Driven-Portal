@@ -628,6 +628,9 @@ def feedback():
 # service, bucket, SA, IAM, or domain. Client-facing routes live under /w/<c>/; team management
 # extends the operator console under /admin/atrium/.
 ATRIUM_TABS = {"overview", "dashboard", "leadgen", "organic", "calendar", "conversations", "settings"}
+# Team-only tabs: rendered ONLY for admins/super-admins (is_superadmin), never shown to clients. The
+# Website Health tab monitors the client's live site + the marketing tags installed on it.
+ATRIUM_TEAM_TABS = {"website-health"}
 
 
 @app.template_filter("atrium_dt")
@@ -674,6 +677,19 @@ def _atrium_admin_json_gate(client):
     return None
 
 
+def _atrium_root_json_gate(client):
+    """Gate for Website-Health EDITS: THE super admin only (admins are view-only). JSON error or None.
+
+    Website Health is visible to every admin (is_superadmin) but only THE super admin (is_root_admin)
+    may change the monitored URL, run a check, or edit notes -- so an admin "just sees it".
+    """
+    if not authed():
+        return Response('{"error":"unauthorized"}', status=401, mimetype="application/json")
+    if not is_root_admin():
+        return Response('{"error":"forbidden"}', status=403, mimetype="application/json")
+    return None
+
+
 def _bool_field(name):
     """Read a checkbox-style form field as a bool."""
     return request.form.get(name, "0") in ("1", "true", "True", "on")
@@ -710,8 +726,11 @@ def atrium(client, tab):
     ws = workspace.load_workspace(client)
     if ws is None:
         return Response("No workspace exists for this client yet.", status=404, mimetype="text/plain")
-    if tab not in ATRIUM_TABS:
+    if tab not in ATRIUM_TABS and tab not in ATRIUM_TEAM_TABS:
         tab = "overview"
+    if tab in ATRIUM_TEAM_TABS and not is_superadmin():
+        # Team-only tabs (Website Health) are never shown to clients -- bounce to Dashboard.
+        tab = "dashboard"
     if tab == "overview":
         # Overview is hidden in the nav for the demo; land on Dashboard instead so the bare
         # workspace URL never opens on the hidden tab. (Revert with the nav list to restore it.)
@@ -731,6 +750,8 @@ def atrium(client, tab):
         user=user,
         user_notify=workspace.get_notify(ws, user or ""),
         is_superadmin=(is_superadmin() and not admin_preview),
+        # Website Health is editable by THE super admin only; admins see it read-only.
+        can_edit_health=(is_root_admin() and not admin_preview),
         admin_preview=admin_preview,
         admin_name=_admin_sender_name(user),
         favicon=brand.FAVICON_DATA_URI,
@@ -889,6 +910,43 @@ def atrium_resolve_comment(client):
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     return jsonify(ok=True, status=status)
+
+
+@app.route("/w/<client>/state.json", methods=["GET"])
+def atrium_state(client):
+    """Live-state snapshot for in-page polling — per-content review status + comment threads.
+
+    Read-only and intentionally tiny: the client/admin views poll this so each side sees the other's
+    comments, change-requests, resolves, and approve/changes status WITHOUT a page reload. There is no
+    websocket/pub-sub (single workspace JSON in GCS, Cloud Run multi-instance) — every viewer simply
+    reads the same authoritative object, so a poll picks up whatever the other party just wrote. Gated
+    exactly like the workspace itself (authed + can_open); the bucket/JSON stays private."""
+    if not authed():
+        return Response('{"error":"unauthorized"}', status=401, mimetype="application/json")
+    if not can_open(client):
+        return Response('{"error":"forbidden"}', status=403, mimetype="application/json")
+    ws = workspace.load_workspace(client)
+    if ws is None:
+        return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    content = {}
+    for camp in ws.get("campaigns", []) or []:
+        for p in camp.get("content", []) or []:
+            cid = p.get("id")
+            if not cid:
+                continue
+            comments = []
+            for cm in p.get("comments", []) or []:
+                comments.append({
+                    "id": cm.get("id", ""),
+                    "sender": cm.get("sender", ""),
+                    "sender_name": cm.get("sender_name", ""),
+                    "body": cm.get("body", ""),
+                    "kind": cm.get("kind", "comment"),
+                    "resolved": bool(cm.get("resolved")),
+                    "when": _atrium_dt(cm.get("created_at", "")),
+                })
+            content[cid] = {"status": p.get("status", ""), "comments": comments}
+    return jsonify(ok=True, content=content)
 
 
 @app.route("/w/<client>/creative/<content_id>", methods=["GET"])
@@ -1584,6 +1642,50 @@ def atrium_admin_dashboard_url(client):
         width = 1200
     workspace.set_dashboard_url(client, url, max(200, min(height, 5000)), max(320, min(width, 5000)))
     return jsonify(ok=True)
+
+
+# --- Website Health (team-only tab: site monitoring + tag detection; THE super admin edits) --------
+@app.route("/w/<client>/admin/website-health/save", methods=["POST"])
+def atrium_admin_website_health_save(client):
+    """Save the monitored website URL and/or team notes (Website Health tab; super-admin only).
+
+    Each field is written only when present in the form, so saving notes never clobbers the URL and
+    vice-versa.
+    """
+    gate = _atrium_root_json_gate(client)
+    if gate:
+        return gate
+    if workspace.load_workspace(client) is None:
+        return Response('{"error":"no_workspace"}', status=404, mimetype="application/json")
+    if "url" in request.form:
+        workspace.set_website_url(client, request.form.get("url", "").strip())
+    if "notes" in request.form:
+        workspace.set_website_notes(client, request.form.get("notes", ""))
+    return jsonify(ok=True)
+
+
+@app.route("/w/<client>/admin/website-health/check", methods=["POST"])
+def atrium_admin_website_health_check(client):
+    """Run a website health check (reachability + tag detection) and store the result (super-admin only).
+
+    The URL comes from the form (so an unsaved-but-typed URL still checks AND is remembered) or falls
+    back to the stored one. Degrades gracefully: a dead site / network error still returns ok:true with
+    the failure recorded INSIDE the result (so the tab shows the problem); only a MISSING url returns
+    ok:false with guidance. Detection scans the live page's HTML -- no GTM API, no new infra.
+    """
+    gate = _atrium_root_json_gate(client)
+    if gate:
+        return gate
+    ws = workspace.load_workspace(client)
+    if ws is None:
+        return Response('{"error":"no_workspace"}', status=404, mimetype="application/json")
+    url = request.form.get("url", "").strip() or (ws.get("website_health") or {}).get("url", "")
+    if not url:
+        return jsonify(ok=False, message="Enter a website URL first.")
+    import atrium_health  # lazy: only this route needs it
+    result = atrium_health.check_website(url)
+    workspace.save_website_check(client, result)
+    return jsonify(ok=True, result=result)
 
 
 @app.route("/w/<client>/admin/calendar", methods=["POST"])

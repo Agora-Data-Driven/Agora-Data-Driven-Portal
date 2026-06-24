@@ -97,7 +97,20 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
   `client_note`, an optional publish `date`, threaded `comments[]` (each `id`/`sender`/`body`/`kind`;
   a `kind:"changes"` comment is a "Request changes" comment that flips status and carries `resolved`),
   and optional uploaded-creative `image_object`/`image_mime`),
-  `calendar[]`, `conversations[]` (`client`/`agora` messages), per-user `notify` prefs.
+  `calendar[]`, `conversations[]` (`client`/`agora` messages), per-user `notify` prefs,
+  and `website_health` (`url`/`notes`/`last_check`) for the team-only Website Health tab.
+- **Website Health is a TEAM-ONLY tab (admins see it, THE super admin edits):** an extra nav tab +
+  pane rendered ONLY for `is_superadmin()` (never shown to clients — the nav, the pane, AND the
+  `/w/<c>/website-health` route all gate on it; a client hitting the URL is bounced to Dashboard).
+  Editing (set URL, run check, notes) is gated `is_root_admin()` via `_atrium_root_json_gate` and the
+  `can_edit_health` template flag, so a non-root admin gets a READ-ONLY view ("the admin can just see
+  it"). `dash/atrium_health.py` (pure, infra-free) fetches the client's live site server-side and
+  reports reachability/errors + the marketing tags installed on the page (GTM containers, GA4, UA,
+  Google Ads, Meta/TikTok/LinkedIn/Hotjar/Clarity… — detected by scanning the returned HTML, NOT the
+  GTM API, so no new infra/credentials; deeper in-container introspection would need the GTM API and
+  stays out of scope). It degrades gracefully (a dead site is recorded in the result, never a 500).
+  Routes: `POST /w/<c>/admin/website-health/{save,check}` (root-only). State lives under
+  `ws["website_health"]` via `workspace.set_website_url`/`set_website_notes`/`save_website_check`.
 - **Content with a date mirrors onto the Content Calendar (linked event):** when an admin gives a
   content piece a `date` (in the add/edit-content form), `workspace.add_content`/`update_content`
   mirror it into `calendar[]` as a linked event carrying `content_id` + `tab` (paid→`leadgen`,
