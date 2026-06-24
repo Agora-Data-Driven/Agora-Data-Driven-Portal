@@ -602,7 +602,10 @@
     .ax-cal-legend { display: flex; gap: 16px; margin: 0 0 14px; font-size: 12.5px; color: var(--ax-sub); flex-wrap: wrap; }
     .ax-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
     .ax-cal-dow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--ax-sub); text-align: center; padding: 4px 0; }
-    .ax-cal-cell { min-height: 86px; border: 1px solid var(--ax-line); border-radius: 10px; padding: 7px 8px; background: var(--ax-white); }
+    /* Fixed-size day boxes (uniform rows): the box never grows with content -- events squish into a
+       contained, scrollable area below the day number, Google-Calendar style. */
+    .ax-cal-cell { height: 86px; min-height: 0; border: 1px solid var(--ax-line); border-radius: 10px; padding: 7px 8px; background: var(--ax-white); overflow: hidden; display: flex; flex-direction: column; }
+    .ax-cal-evs { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
     .ax-cal-cell.out { background: var(--ax-canvas); color: #b7bcc7; }
     .ax-cal-cell.today { background: var(--ax-green-bg); border-color: var(--ax-green); box-shadow: 0 0 0 1px var(--ax-green) inset; }
     /* Green-forward: past = done & faded (with a check); future-ready = ahead of schedule */
@@ -623,7 +626,7 @@
     .ax-cal-month { padding: 14px 16px 16px; }
     .ax-cal-month.is-current { border-color: #cdeccf; box-shadow: 0 0 0 1px var(--ax-green) inset, var(--ax-shadow); }
     .ax-cal-month.is-side { background: linear-gradient(180deg, #FFFFFF 0%, #FCFDFC 100%); }
-    .ax-cal-month.is-side .ax-cal-cell { min-height: 60px; }
+    .ax-cal-month.is-side .ax-cal-cell { height: 60px; }
     .ax-cal-month.is-side .ax-cal-mname { color: var(--ax-sub); }
     .ax-cal-mhead { display: flex; align-items: center; gap: 10px; margin: 0 2px 12px; }
     .ax-cal-mname { font-size: 15px; font-weight: 800; letter-spacing: -.2px; }
@@ -674,7 +677,7 @@
     .ax-cal-arrow { width: 34px; height: 34px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; line-height: 1; color: var(--ax-ink); background: var(--ax-white); border: 1px solid var(--ax-line); border-radius: 9px; cursor: pointer; transition: border-color .12s, color .12s; }
     .ax-cal-arrow:hover { border-color: var(--ax-violet); color: var(--ax-violet-d); }
     .ax-hist-grid { pointer-events: none; }   /* read-only: clicking a day does nothing */
-    .ax-hist-grid .ax-cal-cell { min-height: 60px; }
+    .ax-hist-grid .ax-cal-cell { height: 60px; }
     .ax-hist-list { margin-top: 18px; }
     .ax-hist-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--ax-line); }
     .ax-hist-row:first-child { border-top: 0; }
@@ -717,12 +720,14 @@
     .ax-mile-date { font-size: 11px; font-weight: 700; color: var(--ax-sub); }
     .ax-mile-ahead { color: var(--ax-green-d); font-weight: 800; }
     .ax-mile-title { font-size: 13.5px; font-weight: 700; margin: 1px 0 4px; }
-    .ax-cal-day { font-size: 12px; font-weight: 700; margin-bottom: 5px; }
+    .ax-cal-day { font-size: 12px; font-weight: 700; margin-bottom: 4px; flex: 0 0 auto; }
     .ax-cal-cell.today .ax-cal-day { color: var(--ax-green-d); }
-    .ax-cal-ev { font-size: 11px; line-height: 1.35; display: flex; align-items: flex-start; gap: 5px; margin-bottom: 3px; }
-    .ax-cal-ev .ax-evd { width: 7px; height: 7px; border-radius: 50%; margin-top: 4px; flex: 0 0 auto; }
-    .ax-evd.paid { background: var(--ax-violet); } .ax-evd.organic { background: var(--ax-green); }
-    .ax-evd.due { background: var(--ax-warn); } .ax-evd.milestone { background: #98a0b0; }
+    /* Calendar event pills, colour-coded by source: Lead Gen = purple, Organic = green, Personal = grey.
+       Compact so they squish into the fixed-height box. */
+    .ax-cal-ev { font-size: 10.5px; line-height: 1.25; margin-bottom: 2px; padding: 1px 6px; border-radius: 5px; font-weight: 700; color: #fff; background: #98a0b0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 0 auto; }
+    .ax-cal-ev.leadgen { background: var(--ax-violet-d); }
+    .ax-cal-ev.organic { background: var(--ax-green); }
+    .ax-cal-ev.personal { background: #98a0b0; }
 
     /* Conversations */
     .ax-convo { display: grid; grid-template-columns: 300px 1fr; gap: 18px; align-items: stretch; }
@@ -972,8 +977,8 @@
       .ax-backadmin, .ax-signout { padding: 9px; }
       .ax-share { padding: 8px 12px; font-size: 12px; }
       .ax-cal-grid { gap: 3px; }
-      .ax-cal-cell { min-height: 56px; padding: 4px 5px; border-radius: 8px; }
-      .ax-cal-month.is-side .ax-cal-cell { min-height: 40px; }
+      .ax-cal-cell { height: 56px; padding: 4px 5px; border-radius: 8px; }
+      .ax-cal-month.is-side .ax-cal-cell { height: 40px; }
       .ax-hero-val { font-size: 32px; }
     }
 
@@ -1818,10 +1823,9 @@
           {% endif %}
 
           <div class="ax-cal-legend">
-            <span><span class="ax-dot-i" style="background:#98a0b0"></span>Milestone</span>
-            <span><span class="ax-dot-i" style="background:#9484FB"></span>Paid</span>
-            <span><span class="ax-dot-i" style="background:#4FAB4A"></span>Organic</span>
-            <span><span class="ax-dot-i" style="background:#F2820C"></span>Due</span>
+            <span><span class="ax-dot-i" style="background:#5C4BD0"></span>Lead Generation</span>
+            <span><span class="ax-dot-i" style="background:#4FAB4A"></span>Organic Content</span>
+            <span><span class="ax-dot-i" style="background:#98a0b0"></span>Personal</span>
             <span class="ax-mile-aheadkey">✓ done / ahead of schedule</span>
             <span class="ax-mile-latekey">! past due - mark as done</span>
           </div>
@@ -1842,9 +1846,12 @@
                   {% set cell_emptypast = cell.is_past and cell.in_month and not cell.events and not cell.done and not cell.ahead and not cell.is_today %}
                   <div class="ax-cal-cell {{ 'out' if not cell.in_month else '' }} {{ 'past' if cell.is_past else '' }} {{ 'pastempty' if cell_emptypast else '' }} {{ 'done' if cell.done else '' }} {{ 'overdue' if cell.overdue else '' }} {{ 'ahead' if cell.ahead else '' }} {{ 'today' if cell.is_today else '' }}{{ ' ax-cal-edit' if (is_superadmin and cell.in_month) else '' }}"{% if is_superadmin and cell.in_month %} data-cal-day="{{ cell.iso }}" role="button" tabindex="0"{% endif %}>
                     <div class="ax-cal-day">{{ cell.day }}{% if cell.done %} <span class="ax-cal-check">✓</span>{% elif cell.overdue %} <span class="ax-cal-late">!</span>{% endif %}</div>
+                    <div class="ax-cal-evs">
                     {% for ev in cell.events %}
-                    <div class="ax-cal-ev"><span class="ax-evd {{ ev.kind }}"></span><span>{{ ev.label }}</span></div>
+                    {% set evcls = ('leadgen' if ev.kind == 'paid' else 'organic') if ev.content_id else 'personal' %}
+                    <div class="ax-cal-ev {{ evcls }}" title="{{ ev.label }}">{{ ev.label }}</div>
                     {% endfor %}
+                    </div>
                   </div>
                   {% endfor %}{% endfor %}
                 </div>
@@ -3230,17 +3237,17 @@
           dd.appendChild(lt);
         }
         cell.appendChild(dd);
+        var evs = document.createElement("div");
+        evs.className = "ax-cal-evs";
         ce.forEach(function (ev) {
           var ed = document.createElement("div");
-          ed.className = "ax-cal-ev";
-          var dot = document.createElement("span");
-          dot.className = "ax-evd " + (ev.kind || "milestone");
-          var lb = document.createElement("span");
-          lb.textContent = ev.label || "";
-          ed.appendChild(dot);
-          ed.appendChild(lb);
-          cell.appendChild(ed);
+          var cls = ev.content_id ? (ev.kind === "paid" ? "leadgen" : "organic") : "personal";
+          ed.className = "ax-cal-ev " + cls;
+          ed.textContent = ev.label || "";
+          ed.title = ev.label || "";
+          evs.appendChild(ed);
         });
+        cell.appendChild(evs);
         grid.appendChild(cell);
       }
     }
