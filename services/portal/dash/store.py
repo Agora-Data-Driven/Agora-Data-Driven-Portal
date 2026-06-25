@@ -160,6 +160,21 @@ def remove_client(key, registry=None):
     return True
 
 
+def restore_client(client, registry=None):
+    """Re-insert a previously-removed client dict verbatim (Trash restore). Returns the registry.
+
+    Restores the full entry (its derived names AND its password hash, if any) so the client's login
+    keeps working. Idempotent on the client key (won't duplicate on a double-restore)."""
+    reg = registry if registry is not None else load_registry()
+    reg.setdefault("clients", [])
+    key = (client or {}).get("key")
+    if not key or any(c.get("key") == key for c in reg["clients"]):
+        return reg  # missing key, or already present -- do not clobber
+    reg["clients"].append(dict(client))
+    save_registry(reg)
+    return reg
+
+
 def set_client_name(key, name, registry=None):
     """Update a client's display name in the registry (a rename). No-op if the client is unknown,
     the name is blank, or it is already current. Persists and returns the registry."""

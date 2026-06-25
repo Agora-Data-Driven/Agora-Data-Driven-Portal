@@ -142,10 +142,58 @@
     .share { display: inline-flex; align-items: center; gap: 8px; background: var(--ag-canvas); border: 1px dashed var(--ag-line);
       border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--ag-charcoal); }
     .share code { font-weight: 700; color: var(--ag-ink); }
-    @media (max-width: 720px) {
-      .side { position: static; height: auto; width: 100%; flex-basis: auto; }
-      .layout { flex-direction: column; }
-      .side-nav { flex-direction: row; flex-wrap: wrap; }
+    /* Activity feed + Trash rows */
+    .feed { max-height: 72vh; overflow-y: auto; }
+    .role-tag { font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; text-transform: uppercase; letter-spacing: .5px; }
+    .role-tag.superadmin { background: var(--ag-purple-bg); color: var(--ag-purple-d); }
+    .role-tag.admin { background: #EAF0FE; color: #3355BB; }
+    .role-tag.client { background: var(--ag-green-bg); color: var(--ag-green-d); }
+    .act-detail { font-weight: 600; color: var(--ag-charcoal); }
+    .kind-tag { font-size: 10px; font-weight: 800; padding: 1px 8px; border-radius: 6px; text-transform: uppercase;
+      letter-spacing: .5px; background: var(--ag-canvas); color: var(--ag-charcoal); border: 1px solid var(--ag-line); margin-right: 4px; }
+    /* ---- Responsive: large desktop → phone ------------------------------------------------- */
+    @media (max-width: 1000px) {
+      .content { padding: 24px 22px 56px; }
+    }
+    /* Tablet / small laptop: the fixed left rail collapses into a top bar whose nav scrolls
+       horizontally (a tab strip), so the console works on any width without a hamburger. */
+    @media (max-width: 760px) {
+      /* No sticky rail at this size, so clipping page-level horizontal scroll is safe and keeps the
+         collapsed nav (a horizontal scroll strip) from ever widening the page. */
+      body { overflow-x: hidden; }
+      .layout { flex-direction: column; min-height: 100vh; }
+      .side { position: static; width: 100%; flex: 0 0 auto; height: auto; min-width: 0;
+        border-right: 0; border-bottom: 1px solid var(--ag-line); }
+      .side-brand { flex-direction: row; align-items: center; justify-content: space-between;
+        gap: 12px; padding: 13px 16px; }
+      .side-brand svg { height: 24px; }
+      .side-nav { flex-direction: row; flex-wrap: nowrap; gap: 6px; padding: 8px 12px; min-width: 0;
+        overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; }
+      .nav-item { width: auto; flex: 0 0 auto; white-space: nowrap; padding: 9px 12px; }
+      .nav-item .count { margin-left: 6px; }
+      .side-foot { flex-direction: row; align-items: center; justify-content: space-between;
+        gap: 12px; padding: 10px 16px; }
+      .side-foot .who { font-size: 11px; }
+      .pill { flex: 0 0 auto; }
+      .content { padding: 20px 16px 44px; max-width: none; }
+      .welcome { padding: 20px 18px; }
+      .welcome h1 { font-size: 21px; }
+      h1.page { font-size: 20px; }
+    }
+    /* Phones: single-column forms + cards, wrapping action rows, full-width inputs. */
+    @media (max-width: 520px) {
+      .content { padding: 16px 13px 40px; }
+      .row { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: minmax(0, 1fr); }
+      .panel { padding: 15px; }
+      .acct-pw { flex-wrap: wrap; }
+      .acct-pw input { width: 100%; }
+      .share { width: 100%; flex-wrap: wrap; }
+      /* Stack each request / activity / trash row so its action buttons drop below the text. */
+      .req { flex-wrap: wrap; align-items: flex-start; }
+      .req-actions { width: 100%; }
+      .card .card-main { padding-right: 8px; }
+      .feed { max-height: none; }
     }
   </style>
 </head>
@@ -175,6 +223,15 @@
         <button type="button" class="nav-item" data-section="create">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           <span>Create account</span>
+        </button>
+        <button type="button" class="nav-item" data-section="activity">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span>Activity</span>
+        </button>
+        <button type="button" class="nav-item" data-section="trash">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          <span>Trash</span>
+          {% if trash %}<span class="count">{{ trash|length }}</span>{% endif %}
         </button>
       </nav>
       <div class="side-foot">
@@ -267,6 +324,54 @@
         </div>
         {% else %}
         <div class="panel"><div class="empty">No pending requests right now.</div></div>
+        {% endif %}
+      </section>
+
+      <!-- ---------- ACTIVITY (audit feed) ---------- -->
+      <section class="pane" data-pane="activity">
+        <h1 class="page">Activity</h1>
+        <p class="lead">Everything admins and clients do across every workspace &mdash; newest first.</p>
+        {% if activity %}
+        <div class="panel feed">
+          {% for a in activity %}
+          <div class="req">
+            <div class="req-main">
+              <div class="req-name">{{ a.actor }} <span class="role-tag {{ a.role }}">{{ a.role }}</span> &middot; {{ a.action }}{% if a.detail %} <span class="act-detail">&ldquo;{{ a.detail }}&rdquo;</span>{% endif %}</div>
+              <div class="req-sub">{{ a.client_name }}{% if a.when %} &middot; {{ a.when }} UTC{% endif %}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="panel"><div class="empty">No activity recorded yet.</div></div>
+        {% endif %}
+      </section>
+
+      <!-- ---------- TRASH (restorable soft-deletes) ---------- -->
+      <section class="pane" data-pane="trash">
+        <h1 class="page">Trash</h1>
+        <p class="lead">Deleted content, campaigns, calendar events and clients are kept here for
+          {{ trash_ttl_days }} days, then removed automatically. <b>Restore</b> puts an item back where
+          it was.</p>
+        {% if trash %}
+        <div class="panel feed">
+          {% for t in trash %}
+          <div class="req">
+            <div class="req-main">
+              <div class="req-name"><span class="kind-tag">{{ t.kind }}</span> {{ t.label }}</div>
+              <div class="req-sub">{{ t.client_name }}{% if t.actor %} &middot; deleted by {{ t.actor }}{% endif %}{% if t.when %} &middot; {{ t.when }} UTC{% endif %} &middot; auto-deletes in {{ t.days_left }} day{{ '' if t.days_left == 1 else 's' }}</div>
+            </div>
+            <div class="req-actions">
+              <form method="post" action="/admin/atrium/restore">
+                <input type="hidden" name="entry_id" value="{{ t.id }}">
+                <button type="submit" class="btn small">Restore</button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="panel"><div class="empty">Trash is empty.</div></div>
         {% endif %}
       </section>
 

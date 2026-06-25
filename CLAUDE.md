@@ -212,6 +212,20 @@ dormant and infra-free unless an operator deliberately enables it. Product name 
   records an activity entry + logs to stdout; real email only when **both** `ATRIUM_EMAIL_ENABLED=1`
   and `ATRIUM_EMAIL_API_KEY` (Secret-Manager) are set, SDK imported lazily. **No provider key
   committed.** Team inbox `ATRIUM_TEAM_EMAIL` (default `info@agoradatadriven.com`).
+- **Super-admin audit feed + restorable Trash (`dash/audit.py`):** ONE new private JSON
+  `audit.json` in the SAME registry bucket (no new bucket/service/IAM — mirrors `store.py`: GCS
+  default, local-fs via `REGISTRY_LOCAL_DIR`). Two lists: **`activity[]`** — every admin/client
+  action across all workspaces (`{ts,client,actor,role,action,detail}`, capped 500, newest first),
+  written by a one-line `_audit(client, action, detail)` call from each mutation route in `main.py`
+  and surfaced in the super-admin console's **Activity** tab (each `_audit` also fires
+  `notify.activity_alert`, an OPTIONAL email reusing the dormant transport). **`trash[]`** — major
+  deletions (content, campaign, personal calendar event, whole client) are soft-deleted: the delete
+  route stashes the removed payload via `_trash(...)` before deleting, and the **Trash** tab lists
+  them with a **Restore** button (`POST /admin/atrium/restore` → `workspace.insert_content`/
+  `insert_campaign`/`insert_calendar_event` or `store.restore_client` + `save_workspace`). Entries
+  older than **30 days** are purged automatically whenever the trash is read/written (lazy purge —
+  the no-infra equivalent of a scheduled job, since the app is request-driven). Both lists are
+  best-effort (swallow storage errors) so logging/trashing can never break the action.
 - **Theme/JS:** the official brand **light** theme — Data Green `#4FAB4A` + Accent Purple `#9484FB`
   (deep companion `#5C4BD0` for white-text fills), on a white canvas with bold black type. The whole
   front-door (login, portal, team console) shares it; Atrium scopes every selector under `.atrium` so

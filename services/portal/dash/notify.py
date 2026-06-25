@@ -183,3 +183,21 @@ def team_replied(client, ws, conversation, sender_name="AGORA"):
     for email, prefs in _eligible_recipients(ws, "replies"):
         if prefs.get("frequency") == "instant":
             _send_email(email, "AGORA replied: %s" % subject, body)
+
+
+# --- super-admin audit alerts -------------------------------------------------------------------
+def activity_alert(actor, role, client, action, detail=""):
+    """Best-effort alert for the super admin's audit feed: log every workspace activity and, IF email
+    is configured, also email the team inbox.
+
+    The always-on view is the in-app Activity tab (audit.log_activity is the source of truth); this
+    only adds an OPTIONAL email, dormant until ATRIUM_EMAIL_* is set, so an unconfigured deploy is
+    completely unaffected. Never raises."""
+    try:
+        who = actor or role or "someone"
+        line = "%s (%s) %s%s for %s" % (
+            who, role or "?", action, (" -- " + detail) if detail else "", client or "?")
+        _log("activity: " + line)
+        _send_email(team_address(), "Atrium activity: %s %s" % (who, action), line)
+    except Exception:
+        pass

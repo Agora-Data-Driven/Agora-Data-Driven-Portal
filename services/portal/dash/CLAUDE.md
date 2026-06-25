@@ -17,7 +17,8 @@ You are in the **`platform-dash`** Cloud Run service: the portal/CRM front-door 
   client account; an admin approves it from `/admin/atrium` (`POST /admin/accounts/{approve,reject}`),
   which creates the client + blank workspace and activates the login. No public self-service access.
 - **Operator console (`/admin/atrium`, `admin_atrium.html`)** = a left **side panel** with panes:
-  Clients (cards + add) · Access requests · Accounts · Create account · Profile. Account management
+  Clients (cards + add) · Access requests · Accounts · Create account · **Activity** (the audit feed)
+  · **Trash** (restorable soft-deletes) · Profile. Account management
   routes (`/admin/accounts/{create-client,create-admin,set-password,reset-password,delete}` +
   `/admin/profile/password`) are gated `is_superadmin()`; **admin-account** creation/management is
   gated `is_root_admin()`. **Roles:** `client` < `admin` (clients `["*"]`) < `superadmin`. THE super
@@ -29,6 +30,10 @@ You are in the **`platform-dash`** Cloud Run service: the portal/CRM front-door 
 - **`atrium_docs.py` / `feedback_ai.py`** — the opt-in Google-Doc → AI strategy feature (gated, degrades).
 - **`atrium_health.py`** — the team-only Website Health tab: fetches the client's live site + detects
   installed marketing tags (GTM/GA4/pixels) by scanning the page HTML (no GTM API, infra-free, degrades).
+- **`audit.py`** — super-admin activity feed + restorable Trash; ONE private `audit.json` in the
+  registry bucket (no new infra). `main.py` calls `_audit()`/`_trash()` from the mutation/delete
+  routes; the console **Activity**/**Trash** tabs read it; deletes are restorable for 30 days (lazy
+  auto-purge). Off-cloud test: `python _audit_localtest.py`.
 - **`brand.py`** — bundled palette + AGORA mark (the container can't read repo-root `assets/`).
 - **Google Tag Manager (site-wide, opt-in):** the `_inject_gtm` `after_request` hook in `main.py`
   injects the GTM container (`<head>` loader + `<body>` `<noscript>`) into **every** portal HTML page
@@ -37,5 +42,5 @@ You are in the **`platform-dash`** Cloud Run service: the portal/CRM front-door 
   (`$GTM_CONTAINER_ID`); reverse-proxied client dashboards (`/d/<c>/`) are skipped.
 
 **Deploy:** `deploy_dash_platform.ps1` (build → `gcloud run deploy platform-dash --no-invoker-iam-check`).
-**Test (off-cloud, what CI runs):** `python _workspace_localtest.py`, `python _accounts_localtest.py`, and `python _atrium_smoketest.py`
+**Test (off-cloud, what CI runs):** `python _workspace_localtest.py`, `python _accounts_localtest.py`, `python _atrium_smoketest.py`, and `python _audit_localtest.py`
 from this dir. **Preview:** `run_local.ps1` (or `preview/Preview Portal (admin).cmd` at repo root).
