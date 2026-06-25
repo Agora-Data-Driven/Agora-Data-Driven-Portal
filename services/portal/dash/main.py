@@ -43,6 +43,7 @@ from flask import (
 
 import atrium_docs
 import atrium_view
+import audit
 import brand
 import notify
 import platform_sso
@@ -177,6 +178,28 @@ def is_root_admin():
         return True
     acct = current_account()
     return bool(acct and acct.get("role") == "superadmin")
+
+
+def _actor_role():
+    """('email', 'superadmin'|'admin'|'client') for the current session -- who is acting, for audit."""
+    role = "superadmin" if is_root_admin() else ("admin" if is_superadmin() else "client")
+    return (current_user() or "system"), role
+
+
+def _audit(client, action, detail=""):
+    """Record one super-admin activity entry (who/what/which client) + optional team email alert.
+
+    Best-effort: never raises into the request path. Powers the super-admin Activity tab so every
+    admin/client action across all workspaces is visible there."""
+    actor, role = _actor_role()
+    audit.log_activity(client, actor, role, action, detail)
+    notify.activity_alert(actor, role, client, action, detail)
+
+
+def _trash(client, kind, label, payload, extra=None):
+    """Soft-delete a removed item into the Trash so the super admin can restore it. Best-effort."""
+    actor, role = _actor_role()
+    audit.trash_put(client, kind, label, payload, actor=actor, role=role, extra=extra)
 
 
 def _gen_password():
@@ -827,6 +850,8 @@ def atrium_decide(client):
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     notify.client_decided(client, item, decision, current_user())
+    _audit(client, "approved content" if decision == "approved" else "requested changes",
+           item.get("ref") or content_id)
     return jsonify(ok=True, status=item.get("status"), decided_at=item.get("decided_at", ""))
 
 
@@ -862,6 +887,7 @@ def atrium_send_message(client):
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     notify.client_messaged(client, conv, current_user())
+    _audit(client, "sent a message", conv.get("subject") or "")
     return jsonify(ok=True, message=message, status=conv.get("status"))
 
 
@@ -916,6 +942,7 @@ def atrium_client_logo(client):
         workspace.set_client_logo(client, logo_markup)
     except KeyError:
         return Response('{"ok":false,"error":"no_workspace"}', status=404, mimetype="application/json")
+    _audit(client, "changed logo")
     return jsonify(ok=True, logo=logo_markup)
 
 
@@ -946,6 +973,8 @@ def atrium_comment(client):
         notify.client_decided(client, item, "changes", current_user())
     else:
         notify.client_commented(client, item, body, current_user())
+    _audit(client, "requested changes" if kind == "changes" else "commented",
+           item.get("ref") or content_id)
     return jsonify(ok=True, comment=comment, status=item.get("status"))
 
 
@@ -964,6 +993,7 @@ def atrium_resolve_comment(client):
         _item, _comment, status = workspace.resolve_content_comment(client, content_id, comment_id)
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    _audit(client, "resolved change request", content_id)
     return jsonify(ok=True, status=status)
 
 
@@ -1108,6 +1138,7 @@ def atrium_admin_strategy(client):
         camp = workspace.update_campaign(client, campaign_id, **fields)
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    _audit(client, "edited strategy", camp.get("name") or campaign_id)
     return jsonify(ok=True, strategy=camp.get("strategy"), name=camp.get("name"),
                    eyebrow=camp.get("eyebrow"))
 
@@ -1123,6 +1154,7 @@ def atrium_admin_strategy_doc(client):
                                           request.form.get("doc_url", "").strip())
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    _audit(client, "set strategy doc", camp.get("name") or "")
     return jsonify(ok=True, strategy_doc=camp.get("strategy_doc", ""))
 
 
@@ -1151,6 +1183,7 @@ def atrium_admin_generate_summary(client):
                        message="Couldn't read that Google Doc. Open it → Share → General access → "
                                "“Anyone with the link” (Viewer), then try again.")
     workspace.update_campaign(client, campaign_id, strategy=strategy)
+    _audit(client, "generated AI strategy", (camp or {}).get("name") or campaign_id)
     return jsonify(ok=True, strategy=strategy, source=source)
 
 
@@ -1165,6 +1198,7 @@ def atrium_admin_summary(client):
                                          ai_summary=request.form.get("ai_summary", "").strip())
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    _audit(client, "edited AI summary", camp.get("name") or "")
     return jsonify(ok=True, ai_summary=camp.get("ai_summary", ""))
 
 
@@ -1201,6 +1235,7 @@ def atrium_admin_add_campaign(client):
                                    "remove the link to add the campaign and write the strategy by hand.")
     camp = workspace.add_campaign(client, channel, name, request.form.get("eyebrow", "").strip(),
                                   strategy=strategy, strategy_doc=doc_url)
+    _audit(client, "added campaign", name)
     return jsonify(ok=True, id=camp.get("id"), source=source)
 
 
@@ -1215,6 +1250,8 @@ def atrium_admin_delete_campaign(client):
         removed = workspace.delete_campaign(client, campaign_id)
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    _trash(client, "campaign", removed.get("name") or campaign_id, removed)
+    _audit(client, "deleted campaign", removed.get("name") or campaign_id)
     for item in removed.get("content", []):
         if item.get("image_object"):
             workspace.delete_creative(client, item.get("id"))
@@ -1246,6 +1283,7 @@ def atrium_admin_add_content(client):
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     notify.team_added_content(client, workspace.load_workspace(client), item)
+    _audit(client, "added content", item.get("ref") or item.get("id") or "")
     return jsonify(ok=True, id=item.get("id"))
 
 
@@ -1264,6 +1302,7 @@ def atrium_admin_edit_content(client):
         item = workspace.update_content(client, content_id, fields)
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    _audit(client, "edited content", item.get("ref") or content_id)
     return jsonify(ok=True, content=item)
 
 
@@ -1296,10 +1335,17 @@ def atrium_admin_delete_content(client):
     if gate:
         return gate
     content_id = request.form.get("content_id", "").strip()
+    # Capture which campaign holds the piece BEFORE deleting, so a Trash restore knows where to put it.
+    ws_pre = workspace.load_workspace(client)
+    camp_pre, _pre = workspace._find_content(ws_pre, content_id) if ws_pre else (None, None)
+    campaign_id = (camp_pre or {}).get("id", "")
     try:
         removed = workspace.delete_content(client, content_id)
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    _trash(client, "content", removed.get("ref") or content_id, removed,
+           extra={"campaign_id": campaign_id})
+    _audit(client, "deleted content", removed.get("ref") or content_id)
     if removed.get("image_object"):
         workspace.delete_creative(client, content_id)
     return jsonify(ok=True)
@@ -1324,6 +1370,8 @@ def atrium_admin_content_comment(client):
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     notify.team_commented(client, workspace.load_workspace(client), item, body, sender_name)
+    _audit(client, "requested changes" if kind == "changes" else "commented on content",
+           item.get("ref") or content_id)
     return jsonify(ok=True, comment=comment)
 
 
@@ -1339,6 +1387,7 @@ def atrium_admin_delete_comment(client):
         _item, status = workspace.delete_content_comment(client, content_id, comment_id)
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+    _audit(client, "deleted comment", content_id)
     return jsonify(ok=True, status=status)
 
 
@@ -1593,6 +1642,7 @@ def atrium_admin_metrics(client):
         })
     if metrics:
         workspace.set_metrics(client, metrics)
+    _audit(client, "updated metrics")
     return jsonify(ok=True)
 
 
@@ -1651,6 +1701,7 @@ def atrium_admin_communication(client):
     kind = "email" if request.form.get("kind", "").strip() == "email" else "meeting"
     if op == "delete":
         workspace.delete_communication(client, kind, request.form.get("item_id", "").strip())
+        _audit(client, "deleted %s summary" % kind)
         return jsonify(ok=True)
     if op == "add":
         date = (request.form.get("date", "") or "").strip() or None
@@ -1663,6 +1714,7 @@ def atrium_admin_communication(client):
                                                  request.form.get("summary", "").strip(),
                                                  request.form.get("attendees", "").strip(),
                                                  date=date)
+        _audit(client, "added %s summary" % kind)
         return jsonify(ok=True, id=item.get("id"))
     if op == "edit":
         fields = {}
@@ -1670,6 +1722,7 @@ def atrium_admin_communication(client):
             if request.form.get(key) is not None:
                 fields[key] = request.form.get(key, "").strip()
         workspace.update_communication(client, kind, request.form.get("item_id", "").strip(), fields)
+        _audit(client, "edited %s summary" % kind)
         return jsonify(ok=True)
     return Response('{"error":"bad_op"}', status=400, mimetype="application/json")
 
@@ -1694,6 +1747,7 @@ def atrium_admin_intel(client):
         return Response('{"error":"bad_section"}', status=400, mimetype="application/json")
     if op == "delete":
         workspace.delete_intel_entry(client, section, request.form.get("entry_id", "").strip())
+        _audit(client, "deleted intel entry", section)
         return jsonify(ok=True)
     fields = {}
     for key in workspace._INTEL_FIELDS:
@@ -1703,9 +1757,11 @@ def atrium_admin_intel(client):
         if not (fields.get("body") or fields.get("title") or fields.get("heading")):
             return jsonify(ok=False, message="Add a heading, headline, or some text first."), 400
         item = workspace.add_intel_entry(client, section, fields)
+        _audit(client, "added intel entry", fields.get("title") or section)
         return jsonify(ok=True, id=item.get("id"))
     if op == "edit":
         workspace.update_intel_entry(client, section, request.form.get("entry_id", "").strip(), fields)
+        _audit(client, "edited intel entry", section)
         return jsonify(ok=True)
     return Response('{"error":"bad_op"}', status=400, mimetype="application/json")
 
@@ -1752,6 +1808,7 @@ def atrium_admin_website_health_save(client):
         workspace.set_website_url(client, request.form.get("url", "").strip())
     if "notes" in request.form:
         workspace.set_website_notes(client, request.form.get("notes", ""))
+    _audit(client, "saved website health settings")
     return jsonify(ok=True)
 
 
@@ -1776,6 +1833,7 @@ def atrium_admin_website_health_check(client):
     import atrium_health  # lazy: only this route needs it
     result = atrium_health.check_website(url)
     workspace.save_website_check(client, result)
+    _audit(client, "ran website health check", url)
     return jsonify(ok=True, result=result)
 
 
@@ -1791,7 +1849,14 @@ def atrium_admin_calendar(client):
             index = int(request.form.get("index", "-1"))
         except (TypeError, ValueError):
             index = -1
-        workspace.delete_calendar_event(client, index)
+        removed = workspace.delete_calendar_event(client, index)
+        if removed is not None:
+            label = removed.get("label") or "event"
+            # Personal events are restorable; content-linked ones are owned by their piece (restore
+            # the content instead), so only trash personal events -- but audit either way.
+            if not removed.get("content_id"):
+                _trash(client, "calendar", label, removed)
+            _audit(client, "deleted calendar event", label)
         return jsonify(ok=True)
     if op == "status":
         # Mark an event done (or clear it). Empty status clears; anything else normalizes to "done".
@@ -1804,6 +1869,8 @@ def atrium_admin_calendar(client):
         event = workspace.set_calendar_status(client, index, status)
         if event is None:
             return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+        _audit(client, "marked calendar event " + ("done" if status else "not done"),
+               event.get("label") or "event")
         return jsonify(ok=True, event=event)
     if op == "edit":
         # Edit an existing event's date / label / kind (paid|organic|due|milestone) in place.
@@ -1819,12 +1886,14 @@ def atrium_admin_calendar(client):
                                               request.form.get("label", "").strip(), kind)
         if event is None:
             return Response('{"error":"not_found"}', status=404, mimetype="application/json")
+        _audit(client, "edited calendar event", event.get("label") or "event")
         return jsonify(ok=True, event=event)
     date = request.form.get("date", "").strip()
     if not date:
         return Response('{"error":"date_required"}', status=400, mimetype="application/json")
     kind = request.form.get("kind", "milestone").strip() or "milestone"
     event = workspace.add_calendar_event(client, date, request.form.get("label", "").strip(), kind)
+    _audit(client, "added calendar event", event.get("label") or "event")
     return jsonify(ok=True, event=event)
 
 
@@ -1846,6 +1915,7 @@ def atrium_admin_reply_inline(client):
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     notify.team_replied(client, workspace.load_workspace(client), conv, sender_name)
+    _audit(client, "replied", conv.get("subject") or "")
     return jsonify(ok=True, message=message, status=conv.get("status"))
 
 
@@ -1916,10 +1986,33 @@ def admin_atrium():
         "role": (me or {}).get("role") or ("superadmin" if is_root_admin() else "admin"),
         "has_account": me is not None,
     }
+
+    def _short_when(ts):
+        # "2026-06-25T09:12:30Z" -> "Jun 25, 09:12" (UTC); falls back to the raw ts on any surprise.
+        try:
+            dt = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+            return dt.strftime("%b %d, %H:%M")
+        except Exception:
+            return ts or ""
+
+    activity = []
+    for a in audit.recent_activity(limit=300):
+        a2 = dict(a)
+        a2["client_name"] = name_by_key.get(a.get("client", ""), a.get("client", "")) or "—"
+        a2["when"] = _short_when(a.get("ts", ""))
+        activity.append(a2)
+    trash = []
+    for t in audit.trash_list():
+        t2 = dict(t)
+        t2["client_name"] = name_by_key.get(t.get("client", ""), t.get("client", "")) or "—"
+        t2["when"] = _short_when(t.get("ts", ""))
+        trash.append(t2)
+
     return render_template(
         "admin_atrium.html", clients=clients, pending=pending,
         client_accounts=client_accounts, admin_accounts=admin_accounts,
         profile=profile, is_root_admin=is_root_admin(), super_admin_email=SUPER_ADMIN_EMAIL,
+        activity=activity, trash=trash, trash_ttl_days=audit.TRASH_TTL_DAYS,
         initial_section=(request.args.get("section") or "clients"),
         user=current_user(), workspace_name=WORKSPACE_NAME,
         msg=request.args.get("msg"), flash_err=(request.args.get("err") == "1"), **_brand_ctx())
@@ -1965,6 +2058,7 @@ def admin_atrium_new():
         return redirect(url_for("atrium", client=key))  # already exists -> just open it
     import onboard_client  # lazy: reuses brand_for() + starter_workspace()
     onboard_client.onboard(key, name or None)
+    _audit(key, "created client", name or key)
     return redirect(url_for("atrium", client=key))
 
 
@@ -2042,6 +2136,7 @@ def admin_account_create_client():
     onboard_client.onboard(key, company)            # client + blank workspace
     store.add_account(email, password, name=company, role="client", clients=[key],
                       status="active", requested_name=company)
+    _audit(key, "created client account", email)
     return _atrium_redirect_list(
         "Created client '%s'. The client signs in at /login with  %s / %s  to see their own site. "
         "Use 'Open site' below to view their workspace." % (key, email, password), section="accounts")
@@ -2063,6 +2158,7 @@ def admin_account_create_admin():
         return _atrium_redirect_list("An account already exists for %s." % email, section="create", err=True)
     store.add_account(email, password, name=name or email.split("@")[0], role="admin",
                       clients=["*"], status="active")
+    _audit("", "created admin account", email)
     return _atrium_redirect_list(
         "Created admin '%s'. Login -> %s / %s" % (name or email, email, password), section="accounts")
 
@@ -2116,6 +2212,7 @@ def admin_account_delete():
     removed = store.remove_account(email)
     if not removed:
         return _atrium_redirect_list("No account found for %s." % email, section="accounts", err=True)
+    _audit("", "deleted account", email)
     return _atrium_redirect_list("Deleted the account for %s." % email, section="accounts")
 
 
@@ -2195,6 +2292,7 @@ def admin_atrium_logo(client):
     except KeyError:
         return _atrium_redirect_list("'%s' has no workspace yet -- create one before adding a logo."
                                      % client)
+    _audit(client, "uploaded client logo")
     return _atrium_redirect_list("Logo updated for '%s'." % client)
 
 
@@ -2202,14 +2300,60 @@ def admin_atrium_logo(client):
 def admin_atrium_delete(client):
     """Delete a client: remove its registry entry (login + listing) AND its Atrium workspace object.
 
-    Destructive and irreversible; gated super-admin and confirmed in the UI before the POST fires."""
+    Soft-delete: the registry entry and the workspace JSON are first stashed in the Trash (restorable
+    by the super admin for 30 days). Gated super-admin and confirmed in the UI before the POST fires."""
     if not is_superadmin():
         return Response("Forbidden", status=403, mimetype="text/plain")
+    # Snapshot BEFORE removal so a Trash restore can rebuild the login AND the whole workspace.
+    client_entry = store.get_client(client)
+    ws_snapshot = workspace.load_workspace(client)
     removed = store.remove_client(client)
     workspace.delete_workspace(client)
     if not removed:
         return _atrium_redirect_list("No client '%s' to delete." % client)
-    return _atrium_redirect_list("Deleted client '%s' (login and workspace removed)." % client)
+    name = (client_entry or {}).get("name") or client
+    _trash(client, "client", name, client_entry or {"key": client},
+           extra={"workspace": ws_snapshot})
+    _audit(client, "deleted client", name)
+    return _atrium_redirect_list("Deleted client '%s' — restorable from Trash for 30 days." % client)
+
+
+@app.route("/admin/atrium/restore", methods=["POST"])
+def admin_atrium_restore():
+    """Restore a soft-deleted item from the Trash (super-admin only).
+
+    Re-inserts the stashed payload via the right workspace/store helper, then removes the Trash entry.
+    Major item types only: content, campaign, calendar event, and whole client."""
+    if not is_superadmin():
+        return Response("Forbidden", status=403, mimetype="text/plain")
+    entry = audit.trash_get(request.form.get("entry_id", "").strip())
+    if not entry:
+        return _atrium_redirect_list("That item is no longer in the Trash.", section="trash", err=True)
+    kind, client = entry.get("kind"), entry.get("client")
+    payload, extra = (entry.get("payload") or {}), (entry.get("extra") or {})
+    label = entry.get("label") or kind
+    try:
+        if kind == "content":
+            workspace.insert_content(client, extra.get("campaign_id", ""), payload)
+        elif kind == "campaign":
+            workspace.insert_campaign(client, payload)
+        elif kind == "calendar":
+            workspace.insert_calendar_event(client, payload)
+        elif kind == "client":
+            store.restore_client(payload)
+            if extra.get("workspace") is not None:
+                workspace.save_workspace(client, extra["workspace"])
+        else:
+            return _atrium_redirect_list("Can't restore that item type.", section="trash", err=True)
+    except KeyError:
+        return _atrium_redirect_list(
+            "Couldn't restore '%s' — its campaign was deleted too (restore the campaign first)." % label,
+            section="trash", err=True)
+    except Exception:
+        return _atrium_redirect_list("Couldn't restore '%s'." % label, section="trash", err=True)
+    audit.trash_remove(entry.get("id"))
+    _audit(client, "restored %s" % kind, label)
+    return _atrium_redirect_list("Restored '%s'." % label, section="trash")
 
 
 @app.route("/healthz", methods=["GET"])

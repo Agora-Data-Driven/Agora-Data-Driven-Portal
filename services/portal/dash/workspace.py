@@ -673,6 +673,23 @@ def delete_campaign(client, campaign_id):
     return _mutate(client, fn)
 
 
+def insert_campaign(client, campaign):
+    """Re-insert a previously-removed campaign verbatim (Trash restore). Returns it.
+
+    Appends the raw campaign dict back (its content, strategy, etc. intact) and re-mirrors any dated
+    content onto the Content Calendar. Idempotent on the campaign id (won't duplicate)."""
+    def fn(ws):
+        c = dict(campaign or {})
+        camps = ws.setdefault("campaigns", [])
+        if any(x.get("id") == c.get("id") for x in camps):
+            return c  # already present -- don't duplicate on a double-restore
+        camps.append(c)
+        for item in c.get("content", []):
+            _sync_content_calendar(ws, c, item)
+        return c
+    return _mutate(client, fn)
+
+
 def _content_event_kind(camp):
     """The content calendar 'kind' for a piece, derived from its campaign channel: a paid/lead-gen
     campaign mirrors as a 'paid' event, anything else as 'organic'."""
@@ -780,6 +797,26 @@ def delete_content(client, content_id):
                                       if e.get("content_id") != content_id]
                     return removed
         raise KeyError("no content '%s'" % content_id)
+    return _mutate(client, fn)
+
+
+def insert_content(client, campaign_id, content):
+    """Re-insert a previously-removed content piece verbatim into its campaign (Trash restore).
+
+    Restores the piece as it was (status/comments/date preserved) and re-mirrors its calendar event
+    if it had a date. Raises KeyError if the campaign no longer exists (e.g. it was deleted too --
+    restore the campaign instead). Idempotent on the content id."""
+    def fn(ws):
+        camp = _find_campaign(ws, campaign_id)
+        if camp is None:
+            raise KeyError("no campaign '%s'" % campaign_id)
+        items = camp.setdefault("content", [])
+        c = dict(content or {})
+        if any(x.get("id") == c.get("id") for x in items):
+            return c
+        items.append(c)
+        _sync_content_calendar(ws, camp, c)
+        return c
     return _mutate(client, fn)
 
 
@@ -920,6 +957,18 @@ def delete_calendar_event(client, index):
         if 0 <= index < len(events):
             return events.pop(index)
         return None
+    return _mutate(client, fn)
+
+
+def insert_calendar_event(client, event):
+    """Re-insert a previously-removed calendar event verbatim (Trash restore). Returns it.
+
+    Only used to restore PERSONAL (non-content) events -- a content-linked event is owned by its
+    piece and is recreated by restoring the content, so this never re-adds a content-linked one."""
+    def fn(ws):
+        ev = dict(event or {})
+        ws.setdefault("calendar", []).append(ev)
+        return ev
     return _mutate(client, fn)
 
 

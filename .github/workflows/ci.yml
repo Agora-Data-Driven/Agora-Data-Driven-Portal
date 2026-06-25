@@ -66,3 +66,7 @@ jobs:
       - name: Atrium route + template smoke test (stubs GCS)
         working-directory: services/portal/dash
         run: python _atrium_smoketest.py
+
+      - name: Audit feed + Trash restore test (stubs GCS)
+        working-directory: services/portal/dash
+        run: python _audit_localtest.py
