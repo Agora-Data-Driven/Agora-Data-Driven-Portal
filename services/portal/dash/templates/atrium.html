@@ -513,10 +513,10 @@
     /* Document attachment (pdf/docx/xlsx/…): a clean file-type icon (format depends on the file) +
        filename; click to enlarge into the scrollable doc lightbox. */
     .ax-shot-doc { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
-                   gap: 9px; width: 100%; height: 100%; min-height: 104px; padding: 12px 12px 36px; border: 0; background: #f3f4f7;
+                   gap: 9px; width: 100%; height: 100%; min-height: 104px; padding: 8px 8px 12px; border: 0; background: #f3f4f7;
                    cursor: zoom-in; overflow: hidden; text-align: center; transition: background .12s ease; }
     .ax-shots:not(.multi) .ax-shot-doc { min-height: 210px; }
-    .ax-doc-svg { width: auto; height: 116px; max-height: 60%; display: block; filter: drop-shadow(0 5px 12px rgba(16,24,40,.16)); transition: transform .12s ease; }
+    .ax-doc-svg { width: auto; height: 200px; max-height: 92%; display: block; filter: drop-shadow(0 5px 12px rgba(16,24,40,.16)); transition: transform .12s ease; }
     /* Filename = a translucent black caption bar that slides up from the bottom on hover. The icon
        stays centred; long names scroll left-to-right (see the `is-scroll` marquee JS), short ones rest. */
     .ax-doc-name { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box;
