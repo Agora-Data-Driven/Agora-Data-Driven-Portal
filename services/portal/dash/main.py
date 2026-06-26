@@ -1378,7 +1378,9 @@ def atrium_admin_content_comment(client):
     if not body:
         return Response('{"error":"empty"}', status=400, mimetype="application/json")
     sender_name = request.form.get("sender_name", "").strip() or "AGORA"
-    kind = "changes" if request.form.get("kind", "").strip() == "changes" else "comment"
+    # The team posts a plain comment or a "Notify" (kind=notify) -- a flagged note to the client.
+    # "Request changes" (kind=changes) is a CLIENT-only power, so it is never honored here.
+    kind = "notify" if request.form.get("kind", "").strip() == "notify" else "comment"
     try:
         item, comment = workspace.add_content_comment(
             client, content_id, "agora", sender_name, body, kind=kind,
@@ -1386,7 +1388,7 @@ def atrium_admin_content_comment(client):
     except KeyError:
         return Response('{"error":"not_found"}', status=404, mimetype="application/json")
     notify.team_commented(client, workspace.load_workspace(client), item, body, sender_name)
-    _audit(client, "requested changes" if kind == "changes" else "commented on content",
+    _audit(client, "notified client" if kind == "notify" else "commented on content",
            item.get("ref") or content_id)
     return jsonify(ok=True, comment=comment)
 
