@@ -624,7 +624,7 @@
         animation: ax-detail-fade .18s ease-out; }
     .ax-collapse.is-open .ax-detail > .ax-content-main { background: var(--ax-white);
         border-radius: var(--ax-radius); box-shadow: var(--ax-shadow-lg); padding: 22px 24px;
-        width: 100%; max-width: 640px; max-height: calc(100vh - 96px); overflow-y: auto;
+        width: 80%; max-width: 1100px; max-height: calc(100vh - 96px); overflow-y: auto;
         animation: ax-detail-pop .22s cubic-bezier(.22,1,.36,1); }
     /* Smooth open: the backdrop fades in while the card lifts/scales into place. */
     @keyframes ax-detail-fade { from { opacity: 0; } to { opacity: 1; } }
@@ -894,6 +894,9 @@
     /* A resolved changes-comment: settles to a calm green-tinted "done" state. */
     .ax-com.changes.resolved { background: var(--ax-green-bg); border-color: #cdeccf; }
     .ax-com.changes.resolved .ax-com-flag { color: var(--ax-green-d); border-color: #cdeccf; }
+    /* A team "Notify" comment: light-blue flagged bubble, matching the Comment button. */
+    .ax-com.notify { align-self: stretch; max-width: 100%; background: var(--ax-violet-bg); border: 1px solid #BBD4FB; }
+    .ax-com.notify .ax-com-flag { color: var(--ax-violet-d); background: var(--ax-white); border-color: #BBD4FB; }
     .ax-com-resolve { margin-top: 7px; }
     .ax-com-resolve .ax-btn { padding: 5px 11px; }
     .ax-com-resolve[hidden] { display: none; }
@@ -911,6 +914,9 @@
     /* "Request changes" -> dark Data Green CTA (matches Add content, a notch darker). */
     .ax-com-send .ax-btn.green { background: linear-gradient(135deg, var(--ax-green-d) 0%, #234F20 100%); color: #fff; border-color: transparent; box-shadow: 0 1px 2px rgba(16,24,40,.12); }
     .ax-com-send .ax-btn.green:hover { background: linear-gradient(135deg, #234F20 0%, #163614 100%); }
+    /* Team-only "Notify" -> blue CTA, matching the Comment button colour. */
+    .ax-com-send .ax-btn.notify { background: linear-gradient(135deg, var(--ax-violet) 0%, var(--ax-violet-d) 100%); color: #fff; border-color: transparent; box-shadow: 0 1px 2px rgba(16,24,40,.12); }
+    .ax-com-send .ax-btn.notify:hover { background: linear-gradient(135deg, var(--ax-violet-d) 0%, #103E94 100%); }
 
     /* ---- Super-admin inline editing ---- */
     .ax-adminbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; padding: 10px 14px; background: #1c2440; color: #eaf0ff; border-radius: 12px; font-size: 13px; }
@@ -951,6 +957,7 @@
     .ax-camp-tools .ax-btn.danger, [data-contenttools] .ax-btn.danger, .ax-pane-tools .ax-btn.danger { background: var(--ax-white); color: var(--ax-bad); border-color: rgba(229,65,62,.55); box-shadow: none; }  /* Delete campaign + Delete -> red outline */
     .ax-camp-tools .ax-btn.danger:hover, [data-contenttools] .ax-btn.danger:hover, .ax-pane-tools .ax-btn.danger:hover { background: rgba(229,65,62,.08); border-color: var(--ax-bad); color: var(--ax-bad); }
     .ax-editbox { width: 100%; font: inherit; font-size: 13.5px; padding: 9px 11px; border: 1px solid var(--ax-violet); border-radius: 9px; background: #fbfbff; outline: none; margin-bottom: 8px; }
+    .ax-field-label { display: block; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ax-violet-d); margin: 0 0 5px; }
     textarea.ax-editbox { min-height: 60px; resize: vertical; }
     /* Platform picker: a row of icon chips, click to toggle (multi-select, no Ctrl). A selected chip
        takes the brand violet; the brand glyph keeps its own colour. */
@@ -1050,6 +1057,21 @@
     .ax-modal-card h3 { margin-top: 0; }
     .ax-modal-x { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--ax-canvas); color: var(--ax-sub); font-size: 20px; line-height: 1; cursor: pointer; }
     .ax-modal-x:hover { background: var(--ax-line); color: var(--ax-ink); }
+
+    /* Branded confirm dialog (replaces the native window.confirm()) -- centered, Atrium-themed. */
+    .ax-confirm { position: fixed; inset: 0; z-index: 200; background: rgba(10,12,20,.55); display: grid; place-items: center; padding: 24px; }
+    .ax-confirm[hidden] { display: none; }
+    .ax-confirm-card { position: relative; background: var(--ax-white); border-radius: var(--ax-radius); box-shadow: var(--ax-shadow-lg); padding: 26px 26px 22px; width: 100%; max-width: 420px; text-align: left; animation: axConfirmIn .14s ease-out; }
+    @keyframes axConfirmIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+    .ax-confirm-ico { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: #FDECEC; color: var(--ax-bad); font-size: 22px; font-weight: 800; margin-bottom: 14px; }
+    .ax-confirm-card h3 { margin: 0 0 6px; font-size: 17px; font-weight: 800; color: var(--ax-ink); }
+    .ax-confirm-msg { margin: 0 0 20px; font-size: 14px; line-height: 1.5; color: var(--ax-sub); }
+    .ax-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .ax-confirm-actions .ax-btn { padding: 9px 18px; }
+    .ax-confirm-actions .ax-btn.danger { background: linear-gradient(135deg, var(--ax-bad) 0%, #C9302D 100%); color: #fff; border-color: transparent; box-shadow: 0 1px 2px rgba(16,24,40,.12); }
+    .ax-confirm-actions .ax-btn.danger:hover { background: linear-gradient(135deg, #C9302D 0%, #A8211F 100%); }
+    .ax-confirm-actions .ax-btn.ghost { background: var(--ax-white); color: var(--ax-sub); border-color: var(--ax-line); }
+    .ax-confirm-actions .ax-btn.ghost:hover { color: var(--ax-ink); border-color: #d6d8e0; }
 
     /* Collapsible sidebar -- the topbar button tucks the nav away (choice persists in localStorage). */
     .ax-top-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -1614,10 +1636,8 @@
                 <button class="ax-modal-x" type="button" data-modalclose aria-label="Close">&times;</button>
                 <div data-stratform="{{ c.id }}">
                   <h3>Edit strategy</h3>
-                  <div class="ax-editrow">
-                    <input class="ax-editbox" data-sf="name" value="{{ c.name }}" placeholder="Campaign name">
-                    <input class="ax-editbox" data-sf="eyebrow" value="{{ c.eyebrow }}" placeholder="Eyebrow">
-                  </div>
+                  <label class="ax-field-label" for="stratname-{{ c.id }}">Campaign Title</label>
+                  <input id="stratname-{{ c.id }}" class="ax-editbox" data-sf="name" value="{{ c.name }}" placeholder="Campaign name">
                   <div class="ax-strat-doc" style="margin-top:14px">
                     <span class="ax-doc-label">{{ ic('sparkle') }} Strategy doc → AI writes the strategy</span>
                     <input class="ax-strat-doc-in" data-docurl="{{ c.id }}" value="{{ c.strategy_doc|default('', true) }}" placeholder="Paste a Google Doc link…">
@@ -1798,8 +1818,9 @@
                   <div class="ax-com-label">Comments</div>
                   <div class="ax-com-list" data-comlist>
                     {% for cm in p.comments|default([], true) %}
-                    <div class="ax-com {{ cm.sender }}{% if cm.kind == 'changes' %} changes{% endif %}{% if cm.resolved %} resolved{% endif %}"{% if cm.id %} data-comid="{{ cm.id }}"{% endif %}>
+                    <div class="ax-com {{ cm.sender }}{% if cm.kind == 'changes' %} changes{% endif %}{% if cm.kind == 'notify' %} notify{% endif %}{% if cm.resolved %} resolved{% endif %}"{% if cm.id %} data-comid="{{ cm.id }}"{% endif %}>
                       {% if cm.kind == 'changes' %}<div class="ax-com-flag">{{ ic('message') }} Request changes{% if cm.resolved %} <span class="ax-com-done">· Resolved</span>{% endif %}</div>{% endif %}
+                      {% if cm.kind == 'notify' %}<div class="ax-com-flag">{{ ic('message') }} Notify</div>{% endif %}
                       <div class="ax-com-who">{{ cm.sender_name }}{% if cm.sender=='agora' %} · AGORA{% endif %}</div>
                       {{ cm.body }}
                       <div class="ax-com-when">{{ cm.created_at|atrium_dt }}</div>
@@ -1817,7 +1838,11 @@
                   <div class="ax-com-form">
                     <textarea data-cominput placeholder="Add a comment…  (Enter to send)"></textarea>
                     <div class="ax-com-send">
+                      {% if is_superadmin %}
+                      <button class="ax-btn notify small" type="button" data-comsend="{{ p.id }}" data-comkind="notify">Notify</button>
+                      {% else %}
                       <button class="ax-btn green small" type="button" data-comsend="{{ p.id }}" data-comkind="changes">Request changes</button>
+                      {% endif %}
                       <button class="ax-btn violet small" type="button" data-comsend="{{ p.id }}" data-comkind="comment">Comment</button>
                     </div>
                   </div>
@@ -2390,6 +2415,19 @@
   </div>
 </div>
 
+<!-- Branded confirm dialog (one shared instance; replaces the native window.confirm()) -->
+<div class="ax-confirm" id="ax-confirm" hidden role="alertdialog" aria-modal="true" aria-labelledby="ax-confirm-title" aria-describedby="ax-confirm-msg">
+  <div class="ax-confirm-card">
+    <div class="ax-confirm-ico" aria-hidden="true">!</div>
+    <h3 id="ax-confirm-title">Are you sure?</h3>
+    <p class="ax-confirm-msg" id="ax-confirm-msg">This cannot be undone.</p>
+    <div class="ax-confirm-actions">
+      <button class="ax-btn ghost" type="button" id="ax-confirm-no">Cancel</button>
+      <button class="ax-btn danger" type="button" id="ax-confirm-yes">Delete</button>
+    </div>
+  </div>
+</div>
+
 <!-- Shared click-to-enlarge lightbox for approval pictures -->
 <div class="ax-lightbox" id="ax-lightbox" hidden>
   <button class="ax-lightbox-close" id="ax-lb-x" type="button" aria-label="Close">&times;</button>
@@ -2431,6 +2469,35 @@
   // '"Ready to book?' would produce an invalid selector and querySelector would THROW, aborting this
   // whole script (so no buttons wire up). Escaping backslash + double-quote makes any value selector-safe.
   function aq(v) { return String(v === null || v === undefined ? "" : v).replace(/[\\"]/g, "\\$&"); }
+
+  // ---- Branded confirm dialog (drop-in replacement for window.confirm) -----------------------
+  // axConfirm(message, onYes) or axConfirm({title, message, confirmText, danger}, onYes): shows the
+  // shared #ax-confirm modal centered on screen and runs onYes only if the user confirms. Falls back
+  // to window.confirm if the modal markup is missing. esprima-4.x-safe (no ?./??).
+  var axCfEl = document.getElementById("ax-confirm");
+  var axCfTitle = document.getElementById("ax-confirm-title");
+  var axCfMsg = document.getElementById("ax-confirm-msg");
+  var axCfYes = document.getElementById("ax-confirm-yes");
+  var axCfNo = document.getElementById("ax-confirm-no");
+  var axCfCb = null;
+  function axCfClose() { if (axCfEl) { axCfEl.hidden = true; } axCfCb = null; }
+  function axConfirm(opts, onYes) {
+    var o = (typeof opts === "string") ? { message: opts } : (opts || {});
+    if (!axCfEl || !axCfYes) { if (window.confirm(o.message || "Are you sure?")) { onYes(); } return; }
+    axCfTitle.textContent = o.title || "Are you sure?";
+    axCfMsg.textContent = o.message || "This cannot be undone.";
+    axCfYes.textContent = o.confirmText || "Delete";
+    axCfYes.className = "ax-btn " + (o.danger === false ? "violet" : "danger");
+    axCfCb = onYes;
+    axCfEl.hidden = false;
+    axCfYes.focus();
+  }
+  if (axCfEl) {
+    axCfYes.addEventListener("click", function () { var cb = axCfCb; axCfClose(); if (cb) { cb(); } });
+    axCfNo.addEventListener("click", axCfClose);
+    axCfEl.addEventListener("click", function (e) { if (e.target === axCfEl) { axCfClose(); } });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !axCfEl.hidden) { axCfClose(); } });
+  }
 
   // ---- Collapsible sidebar (tuck the nav to the side; remembers the choice) ------------------
   var navToggle = document.getElementById("ax-navtoggle");
@@ -3059,7 +3126,7 @@
   // piece to "awaiting" and we reflect that on the card. Only rendered for super-admins.
   function wireDelete(btn) {
     btn.addEventListener("click", function () {
-      if (!window.confirm("Delete this comment? This cannot be undone.")) { return; }
+      axConfirm({ title: "Delete comment?", message: "Delete this comment? This cannot be undone." }, function () {
       var bubble = btn.closest(".ax-com");
       var box = btn.closest("[data-comments]");
       var card = box ? box.closest("[data-content]") : null;
@@ -3071,6 +3138,7 @@
           if (data && data.status) { setCardStatus(card, data.status); }
         })
         .catch(function () { btn.removeAttribute("disabled"); });
+      });
     });
   }
   qsa("[data-comdelete]").forEach(wireDelete);
@@ -3087,11 +3155,11 @@
       // POST returning and this optimistic append - never paint it twice.
       if (comId && list && list.querySelector('[data-comid="' + aq(comId) + '"]')) { return; }
       var el = document.createElement("div");
-      el.className = (isAdmin ? "ax-com agora" : "ax-com client") + (kind === "changes" ? " changes" : "");
+      el.className = (isAdmin ? "ax-com agora" : "ax-com client") + (kind === "changes" ? " changes" : (kind === "notify" ? " notify" : ""));
       if (comId) { el.setAttribute("data-comid", comId); }
-      if (kind === "changes") {
+      if (kind === "changes" || kind === "notify") {
         var flag = document.createElement("div"); flag.className = "ax-com-flag";
-        flag.textContent = "Request changes";
+        flag.textContent = (kind === "notify") ? "Notify" : "Request changes";
         el.appendChild(flag);
       }
       var who = document.createElement("div"); who.className = "ax-com-who";
@@ -3155,13 +3223,14 @@
       var el = document.createElement("div");
       var cls = "ax-com " + (c.sender === "agora" ? "agora" : "client");
       if (c.kind === "changes") { cls += " changes"; }
+      if (c.kind === "notify") { cls += " notify"; }
       if (c.resolved) { cls += " resolved"; }
       el.className = cls;
       if (c.id) { el.setAttribute("data-comid", c.id); }
-      if (c.kind === "changes") {
+      if (c.kind === "changes" || c.kind === "notify") {
         var flag = document.createElement("div"); flag.className = "ax-com-flag";
-        flag.textContent = "Request changes";
-        if (c.resolved) {
+        flag.textContent = (c.kind === "notify") ? "Notify" : "Request changes";
+        if (c.kind === "changes" && c.resolved) {
           var done = document.createElement("span"); done.className = "ax-com-done";
           done.textContent = " · Resolved"; flag.appendChild(done);
         }
@@ -3513,8 +3582,9 @@
     qsa("[data-campdelete]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var name = btn.getAttribute("data-campname") || "this campaign";
-        if (!window.confirm("Delete " + name + " and all its content? This cannot be undone.")) { return; }
-        adminAction("/admin/delete-campaign", { campaign_id: btn.getAttribute("data-campdelete") }, btn);
+        axConfirm({ title: "Delete campaign?", message: "Delete " + name + " and all its content? This cannot be undone." }, function () {
+          adminAction("/admin/delete-campaign", { campaign_id: btn.getAttribute("data-campdelete") }, btn);
+        });
       });
     });
 
@@ -3636,8 +3706,9 @@
     });
     qsa("[data-contentdelete]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        if (!window.confirm("Delete this content piece? This cannot be undone.")) { return; }
-        adminAction("/admin/delete-content", { content_id: btn.getAttribute("data-contentdelete") }, btn);
+        axConfirm({ title: "Delete content?", message: "Delete this content piece? This cannot be undone." }, function () {
+          adminAction("/admin/delete-content", { content_id: btn.getAttribute("data-contentdelete") }, btn);
+        });
       });
     });
 
@@ -3839,8 +3910,9 @@
     });
     qsa("[data-commdelete]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        if (!window.confirm("Delete this summary? This cannot be undone.")) { return; }
-        adminAction("/admin/communication", { op: "delete", kind: btn.getAttribute("data-commkind"), item_id: btn.getAttribute("data-commdelete") }, btn);
+        axConfirm({ title: "Delete summary?", message: "Delete this summary? This cannot be undone." }, function () {
+          adminAction("/admin/communication", { op: "delete", kind: btn.getAttribute("data-commkind"), item_id: btn.getAttribute("data-commdelete") }, btn);
+        });
       });
     });
     qsa("[data-commaddbtn]").forEach(function (btn) {
@@ -3881,10 +3953,11 @@
     });
     qsa("[data-inteldelete]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        if (!window.confirm("Delete this update? This cannot be undone.")) { return; }
-        adminAction("/admin/intel", { op: "delete",
-          section: btn.getAttribute("data-intelsection"),
-          entry_id: btn.getAttribute("data-inteldelete") }, btn);
+        axConfirm({ title: "Delete update?", message: "Delete this update? This cannot be undone." }, function () {
+          adminAction("/admin/intel", { op: "delete",
+            section: btn.getAttribute("data-intelsection"),
+            entry_id: btn.getAttribute("data-inteldelete") }, btn);
+        });
       });
     });
     qsa("[data-inteladdbtn]").forEach(function (btn) {
