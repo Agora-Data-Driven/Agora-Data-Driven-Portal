@@ -255,11 +255,17 @@ def fetch_event_counts(property_id, days=28, runner=None):
 
 
 def _tracked_rows(counts):
-    """The fixed per-client funnel table: one row per TRACKED_EVENTS entry, decorated with its count
-    (0 when the event never fired) and an Active/Inactive status (Active == it fired in the window).
+    """The per-client events table. Two parts, in this order:
 
-    `counts` is a {event_name: count} map from the GA4 response; an empty map yields an all-Inactive
-    table (so a client with no/failed data still renders the full list).
+    1. EVERY predefined funnel event (TRACKED_EVENTS), kept whether it fired or not -- because a key
+       event showing Inactive is itself the signal (tracking is missing/broken). `active`/`status`
+       reflect whether it fired in the window.
+    2. Any OTHER event GA4 reported that ISN'T in the predefined list AND is firing -- appended so a
+       live event we didn't anticipate is still surfaced (count-desc). These are always Active.
+
+    `counts` is a {event_name: count} map from the GA4 response; an empty map yields just the
+    predefined list, all Inactive (so a client with no/failed data still renders the full funnel).
+    Each row carries `listed` (True for the predefined funnel, False for an added unlisted event).
     """
     counts = counts or {}
     out = []
@@ -270,5 +276,18 @@ def _tracked_rows(counts):
             "count": count,
             "active": count > 0,
             "status": "Active" if count > 0 else "Inactive",
+            "listed": True,
+        })
+    # Firing events beyond the predefined list, most-active first.
+    extras = [(e, int(c or 0)) for e, c in counts.items()
+              if e not in TRACKED_EVENTS and int(c or 0) > 0]
+    extras.sort(key=lambda ec: ec[1], reverse=True)
+    for event, count in extras:
+        out.append({
+            "event": event,
+            "count": count,
+            "active": True,
+            "status": "Active",
+            "listed": False,
         })
     return out

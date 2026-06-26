@@ -1064,6 +1064,7 @@
     .ax-wh-evtbl tfoot td { font-weight: 800; color: var(--ax-ink); border-bottom: 0; border-top: 2px solid var(--ax-line); }
     .ax-wh-evnum { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; color: var(--ax-ink); }
     .ax-wh-evcode { font-size: 12.5px; color: var(--ax-ink); background: var(--ax-canvas); border: 1px solid var(--ax-line); border-radius: 6px; padding: 2px 7px; }
+    .ax-wh-evextra { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ax-sub); background: var(--ax-canvas); border: 1px solid var(--ax-line); border-radius: 5px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
     .ax-wh-evstcol { text-align: center; white-space: nowrap; }
     .ax-wh-evstatus { display: inline-block; font-size: 11.5px; font-weight: 800; letter-spacing: .3px; padding: 2px 11px; border-radius: 999px; }
     .ax-wh-evstatus.is-active { color: #2f7a2c; background: var(--ax-green-bg, #EAF6E9); border: 1px solid #CDE9CC; }
@@ -2260,17 +2261,16 @@
           {% set gs = wh.ga4_stats %}
           <div class="ax-panel ax-wh-ga4panel">
             <h2 class="ax-wh-h">Events fired &middot; live from GA4</h2>
-            <p class="ax-wh-note">Real counts from Google Analytics &mdash; how many times each event actually fired{% if gs and gs.ok %} in the last {{ gs.days }} days{% endif %}. This is the live data behind the GA4 tag, not a page scan.</p>
+            <p class="ax-wh-note">Live from Google Analytics &mdash; whether each tracked event is firing on the site{% if gs and gs.ok %} (last {{ gs.days }} days){% endif %}. A key event showing <strong>Inactive</strong> means it isn't firing &mdash; worth checking. This is live GA4 data, not a page scan.</p>
             {% if gs and gs.ok %}
             <table class="ax-wh-evtbl">
               <thead>
-                <tr><th>Events Name</th><th class="ax-wh-evnum">Count</th><th class="ax-wh-evstcol">Status</th></tr>
+                <tr><th>Events Name</th><th class="ax-wh-evstcol">Status</th></tr>
               </thead>
               <tbody>
                 {% for r in gs.tracked %}
                 <tr>
-                  <td><code class="ax-wh-evcode">{{ r.event }}</code></td>
-                  <td class="ax-wh-evnum">{{ "{:,}".format(r.count) }}</td>
+                  <td><code class="ax-wh-evcode">{{ r.event }}</code>{% if not r.listed %} <span class="ax-wh-evextra">other</span>{% endif %}</td>
                   <td class="ax-wh-evstcol"><span class="ax-wh-evstatus {{ 'is-active' if r.active else 'is-inactive' }}">{{ r.status }}</span></td>
                 </tr>
                 {% endfor %}

@@ -48,20 +48,26 @@ def test_parse_and_sort():
 
 
 def test_tracked_table():
-    # The fixed per-client table: full TRACKED_EVENTS list, in order, with Active/Inactive status.
+    # Hybrid table: ALL predefined funnel events (kept even when Inactive) THEN firing unlisted events.
     r = atrium_ga4.fetch_event_counts("123456789", runner=_canned)
     tracked = r["tracked"]
-    assert [t["event"] for t in tracked] == atrium_ga4.TRACKED_EVENTS, "must render the full fixed list, in order"
+    events = [t["event"] for t in tracked]
+    # The predefined list comes first, in order, in full.
+    assert events[:len(atrium_ga4.TRACKED_EVENTS)] == atrium_ga4.TRACKED_EVENTS, events
     by_event = {t["event"]: t for t in tracked}
-    # page_view fired in the canned data -> Active with its count.
+    # page_view fired -> Active with its count and listed=True.
     assert by_event["page_view"]["active"] is True and by_event["page_view"]["status"] == "Active"
-    assert by_event["page_view"]["count"] == 4213
+    assert by_event["page_view"]["count"] == 4213 and by_event["page_view"]["listed"] is True
     assert by_event["purchase"]["active"] is True
-    # A tracked event NOT in the GA4 response -> Inactive, count 0 (still present in the table).
+    # A predefined event NOT in the GA4 response -> kept, Inactive, count 0 (THIS is the issue signal).
     assert by_event["newsletter_signup"]["count"] == 0
     assert by_event["newsletter_signup"]["active"] is False and by_event["newsletter_signup"]["status"] == "Inactive"
     assert by_event["view_item"]["status"] == "Inactive"
-    print("ok  fixed tracked table (Active/Inactive per event)")
+    # Firing events NOT in the predefined list are APPENDED (Active, listed=False), most-active first.
+    extras = [t for t in tracked if not t["listed"]]
+    assert [t["event"] for t in extras] == ["session_start", "my_custom_event"], extras
+    assert all(t["active"] and t["status"] == "Active" for t in extras)
+    print("ok  hybrid table (predefined kept Inactive + firing unlisted appended)")
 
 
 def test_tracked_all_inactive_on_empty():
