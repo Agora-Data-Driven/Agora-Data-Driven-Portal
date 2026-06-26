@@ -593,6 +593,10 @@
     .ax-ch-right { display: flex; align-items: center; gap: 10px; }
     .ax-chev { color: #aab0bd; font-size: 13px; transition: transform .2s ease; }
     .ax-collapse.is-open .ax-chev { transform: rotate(180deg); }
+    /* When open, the .ax-detail is position:fixed (a full-screen modal backdrop). A transformed
+       ancestor would become its containing block and clip it to the card box, so the open card must
+       NOT carry the hover transform (.ax-card:hover) and must NOT clip (overflow:hidden above). */
+    .ax-collapse.is-open, .ax-collapse.is-open:hover { transform: none; overflow: visible; }
     .ax-collapse .ax-detail { display: none; }
     /* Open content = a pop-up panel exactly like the Edit-strategy modal: the .ax-detail becomes
        the .ax-modal backdrop and its .ax-content-main becomes the .ax-modal-card. Reuses the
