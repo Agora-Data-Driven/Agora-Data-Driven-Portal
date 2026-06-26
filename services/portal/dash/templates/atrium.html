@@ -1063,9 +1063,11 @@
     .ax-wh-evtbl th { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--ax-sub); font-weight: 700; }
     .ax-wh-evtbl tfoot td { font-weight: 800; color: var(--ax-ink); border-bottom: 0; border-top: 2px solid var(--ax-line); }
     .ax-wh-evnum { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; color: var(--ax-ink); }
-    .ax-wh-evname { font-weight: 700; color: var(--ax-ink); }
-    .ax-wh-evcode { font-size: 11.5px; color: var(--ax-sub); background: var(--ax-canvas); border: 1px solid var(--ax-line); border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
-    .ax-wh-evdesc { color: var(--ax-sub); }
+    .ax-wh-evcode { font-size: 12.5px; color: var(--ax-ink); background: var(--ax-canvas); border: 1px solid var(--ax-line); border-radius: 6px; padding: 2px 7px; }
+    .ax-wh-evstcol { text-align: center; white-space: nowrap; }
+    .ax-wh-evstatus { display: inline-block; font-size: 11.5px; font-weight: 800; letter-spacing: .3px; padding: 2px 11px; border-radius: 999px; }
+    .ax-wh-evstatus.is-active { color: #2f7a2c; background: var(--ax-green-bg, #EAF6E9); border: 1px solid #CDE9CC; }
+    .ax-wh-evstatus.is-inactive { color: #9b2c2a; background: #FDECEC; border: 1px solid rgba(229,65,62,0.3); }
     .ax-wh-evfoot { font-size: 12px; color: var(--ax-sub); margin: 12px 0 0; }
     .ax-wh-evfoot code { background: var(--ax-canvas); border: 1px solid var(--ax-line); border-radius: 6px; padding: 1px 6px; }
     .ax-wh-notes { width: 100%; box-sizing: border-box; }
@@ -2259,25 +2261,22 @@
           <div class="ax-panel ax-wh-ga4panel">
             <h2 class="ax-wh-h">Events fired &middot; live from GA4</h2>
             <p class="ax-wh-note">Real counts from Google Analytics &mdash; how many times each event actually fired{% if gs and gs.ok %} in the last {{ gs.days }} days{% endif %}. This is the live data behind the GA4 tag, not a page scan.</p>
-            {% if gs and gs.ok and gs.rows %}
+            {% if gs and gs.ok %}
             <table class="ax-wh-evtbl">
               <thead>
-                <tr><th>Event</th><th class="ax-wh-evnum">Count</th><th>What it tracks</th></tr>
+                <tr><th>Events Name</th><th class="ax-wh-evnum">Count</th><th class="ax-wh-evstcol">Status</th></tr>
               </thead>
               <tbody>
-                {% for r in gs.rows %}
+                {% for r in gs.tracked %}
                 <tr>
-                  <td><span class="ax-wh-evname">{{ r.label }}</span> <code class="ax-wh-evcode">{{ r.event }}</code></td>
+                  <td><code class="ax-wh-evcode">{{ r.event }}</code></td>
                   <td class="ax-wh-evnum">{{ "{:,}".format(r.count) }}</td>
-                  <td class="ax-wh-evdesc">{{ r.description }}</td>
+                  <td class="ax-wh-evstcol"><span class="ax-wh-evstatus {{ 'is-active' if r.active else 'is-inactive' }}">{{ r.status }}</span></td>
                 </tr>
                 {% endfor %}
               </tbody>
-              <tfoot>
-                <tr><td>Total events</td><td class="ax-wh-evnum">{{ "{:,}".format(gs.total_events) }}</td><td class="ax-wh-evdesc">Across all events in the window</td></tr>
-              </tfoot>
             </table>
-            <p class="ax-wh-evfoot">Property <code>{{ gs.property_id }}</code> &middot; loaded {{ gs.fetched_at|atrium_dt }}</p>
+            <p class="ax-wh-evfoot">Property <code>{{ gs.property_id }}</code> &middot; last {{ gs.days }} days &middot; loaded {{ gs.fetched_at|atrium_dt }}</p>
             {% elif gs and gs.error %}
             <p class="ax-wh-none">Couldn't load event counts &mdash; {{ gs.error }}.</p>
             {% else %}

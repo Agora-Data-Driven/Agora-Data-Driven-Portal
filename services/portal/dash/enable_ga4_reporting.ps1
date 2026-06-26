@@ -22,7 +22,13 @@
 #
 # Fixed facts (see CLAUDE.md): project agora-data-driven, region asia-southeast1, runtime SA
 # platform-dash-web@..., service platform-dash.
-$ErrorActionPreference = "Stop"
+#
+# Stays on $ErrorActionPreference = "Continue" and gates on $LASTEXITCODE (the repo convention): gcloud
+# writes ordinary progress -- even "finished successfully" -- to stderr, which "Stop" would treat as a
+# terminating error and abort the script mid-way EVEN ON SUCCESS.
+$ErrorActionPreference = "Continue"
+function Die([string]$m) { Write-Host "[ERROR] $m" -ForegroundColor Red; exit 1 }
+function Must([string]$w) { if ($LASTEXITCODE -ne 0) { Die "$w (exit $LASTEXITCODE)" } }
 
 $Project   = "agora-data-driven"
 $Region    = "asia-southeast1"
@@ -31,18 +37,21 @@ $RuntimeSA = "platform-dash-web@agora-data-driven.iam.gserviceaccount.com"
 
 Write-Host "[..] Enabling analyticsdata.googleapis.com + iamcredentials.googleapis.com"
 gcloud services enable analyticsdata.googleapis.com iamcredentials.googleapis.com --project=$Project
+Must "enable analyticsdata + iamcredentials APIs"
 
 Write-Host "[..] Granting roles/iam.serviceAccountTokenCreator to $RuntimeSA on itself (idempotent)"
 gcloud iam service-accounts add-iam-policy-binding $RuntimeSA `
   --project=$Project `
   --member="serviceAccount:$RuntimeSA" `
   --role="roles/iam.serviceAccountTokenCreator" | Out-Null
+Must "grant Token Creator on self"
 
 Write-Host "[..] Turning the feature ON for $Service (GA4_REPORTING_ENABLED=1)"
 gcloud run services update $Service `
   --region=$Region `
   --project=$Project `
   --update-env-vars GA4_REPORTING_ENABLED=1
+Must "set GA4_REPORTING_ENABLED on $Service"
 
 Write-Host ""
 Write-Host "[OK] Live GA4 event counts enabled." -ForegroundColor Green

@@ -32,6 +32,21 @@ import re
 # tag-scan finds. They are different identifiers; the Data API only accepts the numeric property id.
 _PID_RE = re.compile(r"(\d{4,15})")
 
+# The canonical funnel events shown for EVERY client (same list everywhere), in display order. The
+# table always renders this full list: each event's Count comes from GA4 (0 when it never fired) and
+# its Status is Active when it fired in the window, Inactive when it did not. Hand-edit this list to
+# change what every client's Website Health table tracks.
+TRACKED_EVENTS = [
+    "page_view",
+    "view_item_list",
+    "view_item",
+    "add_to_cart",
+    "view_cart",
+    "begin_checkout",
+    "purchase",
+    "newsletter_signup",
+]
+
 # Friendly label + one-line "what it tracks" for the common GA4 events, so the table reads in plain
 # English. Unknown/custom events fall back to the raw name + a generic note (see `describe_event`).
 _EVENT_INFO = {
@@ -211,6 +226,7 @@ def fetch_event_counts(property_id, days=28, runner=None):
         "days": int(days),
         "fetched_at": _now_iso(),
         "rows": [],
+        "tracked": _tracked_rows({}),
         "total_events": 0,
         "error": "",
     }
@@ -230,8 +246,29 @@ def fetch_event_counts(property_id, days=28, runner=None):
 
     rows = _parse_rows(report)
     result["rows"] = rows
+    result["tracked"] = _tracked_rows({r["event"]: r["count"] for r in rows})
     result["total_events"] = sum(r["count"] for r in rows)
     result["ok"] = True
     if not rows:
         result["error"] = "No events reported in this window yet."
     return result
+
+
+def _tracked_rows(counts):
+    """The fixed per-client funnel table: one row per TRACKED_EVENTS entry, decorated with its count
+    (0 when the event never fired) and an Active/Inactive status (Active == it fired in the window).
+
+    `counts` is a {event_name: count} map from the GA4 response; an empty map yields an all-Inactive
+    table (so a client with no/failed data still renders the full list).
+    """
+    counts = counts or {}
+    out = []
+    for event in TRACKED_EVENTS:
+        count = int(counts.get(event, 0) or 0)
+        out.append({
+            "event": event,
+            "count": count,
+            "active": count > 0,
+            "status": "Active" if count > 0 else "Inactive",
+        })
+    return out

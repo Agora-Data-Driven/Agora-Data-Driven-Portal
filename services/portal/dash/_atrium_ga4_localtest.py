@@ -47,6 +47,31 @@ def test_parse_and_sort():
     print("ok  parse + sort + labels")
 
 
+def test_tracked_table():
+    # The fixed per-client table: full TRACKED_EVENTS list, in order, with Active/Inactive status.
+    r = atrium_ga4.fetch_event_counts("123456789", runner=_canned)
+    tracked = r["tracked"]
+    assert [t["event"] for t in tracked] == atrium_ga4.TRACKED_EVENTS, "must render the full fixed list, in order"
+    by_event = {t["event"]: t for t in tracked}
+    # page_view fired in the canned data -> Active with its count.
+    assert by_event["page_view"]["active"] is True and by_event["page_view"]["status"] == "Active"
+    assert by_event["page_view"]["count"] == 4213
+    assert by_event["purchase"]["active"] is True
+    # A tracked event NOT in the GA4 response -> Inactive, count 0 (still present in the table).
+    assert by_event["newsletter_signup"]["count"] == 0
+    assert by_event["newsletter_signup"]["active"] is False and by_event["newsletter_signup"]["status"] == "Inactive"
+    assert by_event["view_item"]["status"] == "Inactive"
+    print("ok  fixed tracked table (Active/Inactive per event)")
+
+
+def test_tracked_all_inactive_on_empty():
+    # No data / failed fetch still renders the full list, all Inactive at 0.
+    r = atrium_ga4.fetch_event_counts("123456789", runner=lambda p, d: {"rows": []})
+    assert [t["event"] for t in r["tracked"]] == atrium_ga4.TRACKED_EVENTS
+    assert all(t["count"] == 0 and t["status"] == "Inactive" for t in r["tracked"])
+    print("ok  empty window -> full table, all Inactive")
+
+
 def test_invalid_id():
     r = atrium_ga4.fetch_event_counts("G-QP45TYMEB6", runner=_canned)
     assert r["ok"] is False and "property id" in r["error"].lower(), r
@@ -79,6 +104,8 @@ def test_disabled_without_runner():
 if __name__ == "__main__":
     test_normalize_property_id()
     test_parse_and_sort()
+    test_tracked_table()
+    test_tracked_all_inactive_on_empty()
     test_invalid_id()
     test_api_error_degrades()
     test_empty_window()
