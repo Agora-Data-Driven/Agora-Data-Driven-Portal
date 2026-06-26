@@ -4,6 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ workspace_name }} &middot; Team management</title>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-K5CQ062CRG"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-K5CQ062CRG');
+  </script>
+  <!-- End Google tag (gtag.js) -->
   {% if favicon %}<link rel="icon" href="{{ favicon }}">{% endif %}
   <style>
     /* Operator console: the Agora light brand (mirrors portal.html / assets/brand.json). */
@@ -230,7 +239,7 @@
         </button>
         <button type="button" class="nav-item" data-section="trash">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-          <span>Trash</span>
+          <span>Bin</span>
           {% if trash %}<span class="count">{{ trash|length }}</span>{% endif %}
         </button>
       </nav>
@@ -349,7 +358,7 @@
 
       <!-- ---------- TRASH (restorable soft-deletes) ---------- -->
       <section class="pane" data-pane="trash">
-        <h1 class="page">Trash</h1>
+        <h1 class="page">Bin</h1>
         <p class="lead">Deleted content, campaigns, calendar events and clients are kept here for
           {{ trash_ttl_days }} days, then removed automatically. <b>Restore</b> puts an item back where
           it was.</p>
@@ -371,7 +380,7 @@
           {% endfor %}
         </div>
         {% else %}
-        <div class="panel"><div class="empty">Trash is empty.</div></div>
+        <div class="panel"><div class="empty">Bin is empty.</div></div>
         {% endif %}
       </section>
 
