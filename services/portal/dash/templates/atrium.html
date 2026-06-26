@@ -881,6 +881,12 @@
     .ax-camp-tools .ax-btn.danger:hover, [data-contenttools] .ax-btn.danger:hover, .ax-pane-tools .ax-btn.danger:hover { background: rgba(229,65,62,.08); border-color: var(--ax-bad); color: var(--ax-bad); }
     .ax-editbox { width: 100%; font: inherit; font-size: 13.5px; padding: 9px 11px; border: 1px solid var(--ax-violet); border-radius: 9px; background: #fbfbff; outline: none; margin-bottom: 8px; }
     textarea.ax-editbox { min-height: 60px; resize: vertical; }
+    /* Multi-select platform list: a compact bordered listbox (height auto-fits its options) whose
+       chosen rows take the brand violet, so several platforms can be picked at once. */
+    select.ax-multi { padding: 4px; height: auto; cursor: pointer; align-self: start; overflow-y: auto; }
+    select.ax-multi option { padding: 5px 8px; border-radius: 6px; }
+    select.ax-multi option:checked { background: var(--ax-violet) linear-gradient(0deg, var(--ax-violet), var(--ax-violet)); color: #fff; font-weight: 700; }
+    .ax-multi-hint { margin: -2px 0 8px; font-size: 11.5px; color: var(--ax-sub); }
     .ax-editrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .ax-edit-hidden { display: none; }
     .ax-strat-doc { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 0; padding: 12px; background: var(--ax-canvas); border: 1px solid var(--ax-line); border-radius: 12px; }
@@ -942,8 +948,12 @@
     .ax-thumb-upload .ax-btn:hover { background: rgba(0,0,0,.62); }
     .ax-addpanel { border: 1px dashed var(--ax-line); border-radius: var(--ax-radius); padding: 16px; margin-bottom: 14px; background: var(--ax-canvas); }
     .ax-addpanel h3 { font-size: 14px; font-weight: 800; margin: 0 0 12px; }
+    .ax-addpanel .ax-btn.green { background: linear-gradient(135deg, var(--ax-green-d) 0%, #234F20 100%); color: #fff; border-color: transparent; box-shadow: 0 1px 2px rgba(16,24,40,.12); }  /* Add content & notify -> dark Data Green */
+    .ax-addpanel .ax-btn.green:hover { background: linear-gradient(135deg, #234F20 0%, #163614 100%); }
     /* Add-content modal: attach pictures at creation time. */
     .ax-newpics { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+    .ax-newpics .ax-btn.ghost { background: var(--ax-violet-bg); color: var(--ax-violet-d); border-color: var(--ax-violet); font-weight: 800; }  /* Attached Files -> more visible accent-purple outline */
+    .ax-newpics .ax-btn.ghost:hover { background: var(--ax-violet-d); color: #fff; border-color: var(--ax-violet-d); }
     .ax-newpics-status { font-size: 12px; font-weight: 700; color: var(--ax-green-d); }
     .ax-newdate { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 10px 0; }
     .ax-newdate-lab { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; color: var(--ax-ink); }
@@ -1748,12 +1758,13 @@
                       {% for t in types %}<option value="{{ t }}"{% if p.type_tag == t %} selected{% endif %}>{{ t }}</option>{% endfor %}
                     </select>
                     {% set plats = ['Facebook','Instagram','Google','TikTok','YouTube','LinkedIn','X (Twitter)'] %}
-                    <select class="ax-editbox" data-cf="platform">
-                      <option value="" disabled hidden>Platform</option>
-                      {% if p.platform and p.platform not in plats %}<option value="{{ p.platform }}" selected>{{ p.platform }}</option>{% endif %}
-                      {% for pl in plats %}<option value="{{ pl }}"{% if p.platform == pl %} selected{% endif %}>{{ pl }}</option>{% endfor %}
+                    {% set sel = (p.platform.split(' · ') if p.platform else []) %}
+                    <select class="ax-editbox ax-multi" data-cf="platform" multiple size="7" aria-label="Platform (pick one or more)">
+                      {% for x in sel %}{% if x and x not in plats %}<option value="{{ x }}" selected>{{ x }}</option>{% endif %}{% endfor %}
+                      {% for pl in plats %}<option value="{{ pl }}"{% if pl in sel %} selected{% endif %}>{{ pl }}</option>{% endfor %}
                     </select>
                   </div>
+                  <p class="ax-multi-hint">Platform &mdash; tap to pick one or more (Ctrl / &#8984;-click to select several).</p>
                   <textarea class="ax-editbox" data-cf="caption" placeholder="Description">{{ p.caption }}</textarea>
                   <textarea class="ax-editbox" data-cf="social_caption" placeholder="Caption">{{ p.social_caption|default('', true) }}</textarea>
                   <div class="ax-newdate">
@@ -1783,8 +1794,7 @@
                   <option value="" disabled selected hidden>Type (e.g. Static Post)</option>
                   {% for t in content_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
                 </select>
-                <select class="ax-editbox" data-nc="platform">
-                  <option value="" disabled selected hidden>Platform (e.g. Instagram · Facebook)</option>
+                <select class="ax-editbox ax-multi" data-nc="platform" multiple size="7" aria-label="Platform (pick one or more)">
                   <option value="Facebook">Facebook</option>
                   <option value="Instagram">Instagram</option>
                   <option value="Google">Google</option>
@@ -1794,6 +1804,7 @@
                   <option value="X (Twitter)">X (Twitter)</option>
                 </select>
               </div>
+              <p class="ax-multi-hint">Platform &mdash; tap to pick one or more (Ctrl / &#8984;-click to select several).</p>
               <textarea class="ax-editbox" data-nc="caption" placeholder="Description"></textarea>
               <textarea class="ax-editbox" data-nc="social_caption" placeholder="Caption"></textarea>
               <input class="ax-editbox" data-nc="video_url" placeholder="Video link (optional) - paste an .mp4 or YouTube/Vimeo URL">
@@ -3369,7 +3380,18 @@
   if (isAdmin) {
     function fieldsFrom(scope, attr, into) {
       var out = into || {};
-      qsa("[" + attr + "]", scope).forEach(function (el) { out[el.getAttribute(attr)] = el.value; });
+      qsa("[" + attr + "]", scope).forEach(function (el) {
+        // A <select multiple> reports only the FIRST selection via .value, so gather every selected
+        // option and join with " . " -- the same separator the backend/seed already store (e.g.
+        // "Instagram . Facebook"). Single inputs/selects fall through to .value unchanged.
+        if (el.multiple && el.options) {
+          var vals = [];
+          for (var i = 0; i < el.options.length; i++) { if (el.options[i].selected) { vals.push(el.options[i].value); } }
+          out[el.getAttribute(attr)] = vals.join(" · ");
+        } else {
+          out[el.getAttribute(attr)] = el.value;
+        }
+      });
       return out;
     }
     function toggleHidden(el) { if (el) { el.classList.toggle("ax-edit-hidden"); } }
