@@ -608,7 +608,8 @@
         animation: ax-detail-fade .18s ease-out; }
     .ax-collapse.is-open .ax-detail > .ax-content-main { background: var(--ax-white);
         border-radius: var(--ax-radius); box-shadow: var(--ax-shadow-lg); padding: 22px 24px;
-        width: 100%; max-width: 640px; animation: ax-detail-pop .22s cubic-bezier(.22,1,.36,1); }
+        width: 100%; max-width: 640px; max-height: calc(100vh - 96px); overflow-y: auto;
+        animation: ax-detail-pop .22s cubic-bezier(.22,1,.36,1); }
     /* Smooth open: the backdrop fades in while the card lifts/scales into place. */
     @keyframes ax-detail-fade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes ax-detail-pop { from { opacity: 0; transform: translateY(16px) scale(.97); } to { opacity: 1; transform: none; } }
@@ -862,7 +863,10 @@
     /* ---- Per-creative comment thread (client + team) ---- */
     .ax-comments { margin-top: 14px; border-top: 1px dashed var(--ax-line); padding-top: 12px; }
     .ax-comments .ax-com-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ax-sub); margin-bottom: 8px; }
-    .ax-com-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+    /* Comments scroll inside their own window: ~4 messages stay visible and a long thread
+       scrolls in place instead of stretching the open content panel. */
+    .ax-com-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;
+        max-height: 340px; overflow-y: auto; padding-right: 4px; }
     .ax-com { display: flex; flex-direction: column; max-width: 86%; padding: 8px 11px; border-radius: 11px; font-size: 13px; }
     .ax-com.client { align-self: flex-end; background: var(--ax-green-bg); }
     .ax-com.agora { align-self: flex-start; background: var(--ax-violet-bg); }
@@ -3081,7 +3085,7 @@
         db.setAttribute("data-comdelete", comId); db.textContent = "Delete";
         dw.appendChild(db); el.appendChild(dw); wireDelete(db);
       }
-      if (list) { list.appendChild(el); }
+      if (list) { list.appendChild(el); list.scrollTop = list.scrollHeight; }
     }
     function send(kind) {
       var text = input ? input.value.replace(/^\s+|\s+$/g, "") : "";
