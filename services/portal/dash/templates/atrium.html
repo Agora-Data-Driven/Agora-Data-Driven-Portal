@@ -594,14 +594,14 @@
     .ax-chev { color: #aab0bd; font-size: 13px; transition: transform .2s ease; }
     .ax-collapse.is-open .ax-chev { transform: rotate(180deg); }
     .ax-collapse .ax-detail { display: none; }
-    /* Open content = a centred pop-up (not an inline dropdown): the .ax-detail becomes a fixed
-       backdrop and its .ax-content-main becomes the modal card. Reuses the existing is-open toggle. */
-    .ax-collapse.is-open .ax-detail { display: flex; position: fixed; inset: 0; z-index: 140;
-        background: rgba(10,12,20,.55); justify-content: center; align-items: flex-start;
-        padding: 48px 18px; overflow-y: auto; }
+    /* Open content = a pop-up panel exactly like the Edit-strategy modal: the .ax-detail becomes
+       the .ax-modal backdrop and its .ax-content-main becomes the .ax-modal-card. Reuses the
+       existing is-open toggle, and the detail stays inside the card so every handler keeps working. */
+    .ax-collapse.is-open .ax-detail { display: grid; position: fixed; inset: 0; z-index: 140;
+        background: rgba(10,12,20,.55); place-items: start center; padding: 48px 18px; overflow-y: auto; }
     .ax-collapse.is-open .ax-detail > .ax-content-main { background: var(--ax-white);
         border-radius: var(--ax-radius); box-shadow: var(--ax-shadow-lg); padding: 22px 24px;
-        width: 100%; max-width: 640px; margin: auto; }
+        width: 100%; max-width: 640px; }
     .ax-detail-x { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px;
         border-radius: 50%; border: 0; background: var(--ax-canvas); color: var(--ax-sub);
         font-size: 20px; line-height: 1; cursor: pointer; z-index: 2; }
