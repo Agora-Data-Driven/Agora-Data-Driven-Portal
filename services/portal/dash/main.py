@@ -1115,7 +1115,7 @@ def atrium_state(client):
     return jsonify(ok=True, content=content)
 
 
-@app.route("/w/<client>/creative/<content_id>", methods=["GET"])
+@app.route("/w/<client>/creative/<path:content_id>", methods=["GET"])
 def atrium_creative(client, content_id):
     """Stream a content piece's uploaded creative (authed proxy; the bucket stays private).
 
@@ -1570,7 +1570,7 @@ def atrium_admin_remove_creative(client):
 
 
 # --- Multiple images per content piece: authed serve + admin add/remove -----------------------
-@app.route("/w/<client>/creative/<content_id>/<image_id>", methods=["GET"])
+@app.route("/w/<client>/creative/<path:content_id>/<image_id>", methods=["GET"])
 def atrium_creative_image(client, content_id, image_id):
     """Serve ONE image of a content piece (authed proxy; the bucket stays private).
 
@@ -1585,10 +1585,16 @@ def atrium_creative_image(client, content_id, image_id):
     if ws is None:
         return Response("Not found", status=404, mimetype="text/plain")
     _camp, item = workspace._find_content(ws, content_id)
-    if item is None:
-        return Response("Not found", status=404, mimetype="text/plain")
-    img = next((im for im in item.get("images", []) if im.get("id") == image_id), None)
+    img = next((im for im in item.get("images", []) if im.get("id") == image_id), None) if item else None
     if img is None:
+        # Content ids are free-text titles, so one may literally contain "/" (e.g. "Engaged Lead /
+        # Considering"). The router then splits such a LEGACY single-creative/video id into
+        # (content_id, image_id) and lands here. Re-join and serve it via the single-creative route
+        # before giving up, so a slashed-title creative still loads.
+        whole = content_id + "/" + image_id
+        _c2, w_item = workspace._find_content(ws, whole)
+        if w_item is not None and w_item.get("image_object"):
+            return atrium_creative(client, whole)
         return Response("Not found", status=404, mimetype="text/plain")
     data = workspace.read_content_image_bytes(client, content_id, image_id)
     if data is None:
@@ -1605,7 +1611,7 @@ def atrium_creative_image(client, content_id, image_id):
     return resp
 
 
-@app.route("/w/<client>/docview/<content_id>/<image_id>", methods=["GET"])
+@app.route("/w/<client>/docview/<path:content_id>/<image_id>", methods=["GET"])
 def atrium_docview(client, content_id, image_id):
     """Render an attached Office document (docx/xlsx/pptx/csv/txt) to a scrollable HTML preview,
     served in an <iframe> by the content card + doc lightbox. Same private/authed posture as the

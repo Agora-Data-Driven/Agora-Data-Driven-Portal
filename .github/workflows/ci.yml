@@ -70,3 +70,7 @@ jobs:
       - name: Audit feed + Trash restore test (stubs GCS)
         working-directory: services/portal/dash
         run: python _audit_localtest.py
+
+      - name: Slashed-id creative serve test (stubs GCS)
+        working-directory: services/portal/dash
+        run: python _slashid_creative_test.py

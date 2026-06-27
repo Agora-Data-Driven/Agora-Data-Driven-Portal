@@ -47,5 +47,5 @@ You are in the **`platform-dash`** Cloud Run service: the portal/CRM front-door 
   (`$GTM_CONTAINER_ID`); reverse-proxied client dashboards (`/d/<c>/`) are skipped.
 
 **Deploy:** `deploy_dash_platform.ps1` (build → `gcloud run deploy platform-dash --no-invoker-iam-check`).
-**Test (off-cloud, what CI runs):** `python _workspace_localtest.py`, `python _accounts_localtest.py`, `python _atrium_smoketest.py`, and `python _audit_localtest.py`
+**Test (off-cloud, what CI runs):** `python _workspace_localtest.py`, `python _accounts_localtest.py`, `python _atrium_smoketest.py`, `python _audit_localtest.py`, and `python _slashid_creative_test.py`
 from this dir. **Preview:** `run_local.ps1` (or `preview/Preview Portal (admin).cmd` at repo root).
